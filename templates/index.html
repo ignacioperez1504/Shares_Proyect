@@ -1,0 +1,515 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>ITradingM — Simulador de Portafolio</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;400;600;700&family=JetBrains+Mono:wght@300;400;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+  <!-- Fondo de partículas -->
+  <canvas id="bg-canvas"></canvas>
+
+  <!-- Sidebar -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-logo">
+      <!-- Logo SVG: silueta escalando montaña -->
+      <svg class="logo-svg" viewBox="0 0 60 60" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <linearGradient id="logoGrad" x1="0%" y1="100%" x2="100%" y2="0%">
+            <stop offset="0%" style="stop-color:#00f5ff;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#7b2ff7;stop-opacity:1" />
+          </linearGradient>
+          <filter id="glow">
+            <feGaussianBlur stdDeviation="1.5" result="coloredBlur"/>
+            <feMerge><feMergeNode in="coloredBlur"/><feMergeNode in="SourceGraphic"/></feMerge>
+          </filter>
+        </defs>
+        <!-- Montaña -->
+        <polygon points="5,55 30,8 55,55" fill="none" stroke="url(#logoGrad)" stroke-width="2" filter="url(#glow)"/>
+        <polygon points="20,55 38,25 55,55" fill="none" stroke="url(#logoGrad)" stroke-width="1.5" opacity="0.5" filter="url(#glow)"/>
+        <!-- Sendero -->
+        <polyline points="13,55 22,38 30,30" fill="none" stroke="url(#logoGrad)" stroke-width="1.5" stroke-dasharray="2,2" filter="url(#glow)"/>
+        <!-- Figura humana escalando -->
+        <circle cx="30" cy="27" r="2.5" fill="url(#logoGrad)" filter="url(#glow)"/>
+        <line x1="30" y1="29.5" x2="30" y2="36" stroke="url(#logoGrad)" stroke-width="1.8" filter="url(#glow)"/>
+        <line x1="30" y1="31" x2="27" y2="34" stroke="url(#logoGrad)" stroke-width="1.5" filter="url(#glow)"/>
+        <line x1="30" y1="31" x2="33" y2="34" stroke="url(#logoGrad)" stroke-width="1.5" filter="url(#glow)"/>
+        <line x1="30" y1="36" x2="28" y2="40" stroke="url(#logoGrad)" stroke-width="1.5" filter="url(#glow)"/>
+        <line x1="30" y1="36" x2="32" y2="40" stroke="url(#logoGrad)" stroke-width="1.5" filter="url(#glow)"/>
+        <!-- Bandera cima -->
+        <line x1="30" y1="8" x2="30" y2="3" stroke="#00f5ff" stroke-width="1.5" filter="url(#glow)"/>
+        <polygon points="30,3 36,5 30,7" fill="#00f5ff" filter="url(#glow)"/>
+      </svg>
+      <div class="logo-text">
+        <span class="logo-name">ITradingM</span>
+        <span class="logo-tagline">Portfolio Simulator</span>
+      </div>
+    </div>
+
+    <nav class="sidebar-nav">
+      <a href="#dashboard" class="nav-item active" data-section="dashboard">
+        <span class="nav-icon">⬡</span>
+        <span class="nav-label">Dashboard</span>
+        <span class="nav-indicator"></span>
+      </a>
+      <a href="#portfolio" class="nav-item" data-section="portfolio">
+        <span class="nav-icon">◈</span>
+        <span class="nav-label">Portafolio</span>
+        <span class="nav-indicator"></span>
+      </a>
+      <a href="#equities" class="nav-item" data-section="equities">
+        <span class="nav-icon">▲</span>
+        <span class="nav-label">Renta Variable</span>
+        <span class="nav-indicator"></span>
+      </a>
+      <a href="#fixed" class="nav-item" data-section="fixed">
+        <span class="nav-icon">◼</span>
+        <span class="nav-label">Renta Fija</span>
+        <span class="nav-indicator"></span>
+      </a>
+      <a href="#history" class="nav-item" data-section="history">
+        <span class="nav-icon">≡</span>
+        <span class="nav-label">Historial</span>
+        <span class="nav-indicator"></span>
+      </a>
+      <a href="#reports" class="nav-item" data-section="reports">
+        <span class="nav-icon">◎</span>
+        <span class="nav-label">Reportes</span>
+        <span class="nav-indicator"></span>
+      </a>
+      <a href="#settings" class="nav-item" data-section="settings">
+        <span class="nav-icon">⚙</span>
+        <span class="nav-label">Configuración</span>
+        <span class="nav-indicator"></span>
+      </a>
+    </nav>
+
+    <div class="sidebar-footer">
+      <div class="market-status">
+        <span class="status-dot"></span>
+        <span>Mercado Abierto</span>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Main Content -->
+  <main class="main-content">
+
+    <!-- Header -->
+    <header class="topbar">
+      <button class="menu-toggle" id="menuToggle">☰</button>
+      <div class="topbar-center">
+        <span class="topbar-date" id="simDate">Fecha simulada: —</span>
+      </div>
+      <div class="topbar-right">
+        <div class="ticker-bar">
+          <span class="ticker-item up">BTC <span>$62,450</span> ▲2.3%</span>
+          <span class="ticker-item down">ETH <span>$3,120</span> ▼0.8%</span>
+          <span class="ticker-item up">AAPL <span>$189.50</span> ▲1.1%</span>
+        </div>
+        <div class="user-chip">
+          <div class="user-avatar">JM</div>
+          <div class="user-info">
+            <span class="user-name">Juan M.</span>
+            <span class="user-role">Investor Pro</span>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <!-- Contenido principal -->
+    <div class="content-area" id="mainContent">
+
+      <!-- ===== DASHBOARD ===== -->
+      <section class="page active" id="page-dashboard">
+        <div class="page-header">
+          <h1 class="page-title">Dashboard <span class="accent">Principal</span></h1>
+          <p class="page-subtitle">Resumen ejecutivo de tu portafolio de inversión</p>
+        </div>
+
+        <!-- Cards resumen -->
+        <div class="cards-grid">
+          <div class="card card--cyan reveal">
+            <div class="card-icon">💰</div>
+            <div class="card-body">
+              <div class="card-label">Capital Disponible</div>
+              <div class="card-value" id="capitalDisponible">$0</div>
+              <div class="card-delta up">+2.3% este mes</div>
+            </div>
+            <div class="card-glow"></div>
+          </div>
+          <div class="card card--purple reveal delay-1">
+            <div class="card-icon">📈</div>
+            <div class="card-body">
+              <div class="card-label">Valor Portafolio</div>
+              <div class="card-value" id="valorPortafolio">$0</div>
+              <div class="card-delta up">+5.7% este mes</div>
+            </div>
+            <div class="card-glow"></div>
+          </div>
+          <div class="card card--green reveal delay-2">
+            <div class="card-icon">⚡</div>
+            <div class="card-body">
+              <div class="card-label">Rentabilidad Neta</div>
+              <div class="card-value" id="rentabilidadNeta">0%</div>
+              <div class="card-delta up">+1.2% vs mes anterior</div>
+            </div>
+            <div class="card-glow"></div>
+          </div>
+          <div class="card card--cyan reveal delay-3">
+            <div class="card-icon">💎</div>
+            <div class="card-body">
+              <div class="card-label">Dividendos Recibidos</div>
+              <div class="card-value" id="dividendos">$0</div>
+              <div class="card-delta up">Último: hace 12 días</div>
+            </div>
+            <div class="card-glow"></div>
+          </div>
+          <div class="card card--red reveal delay-4">
+            <div class="card-icon">🔻</div>
+            <div class="card-body">
+              <div class="card-label">Comisiones Broker</div>
+              <div class="card-value" id="comisiones">$0</div>
+              <div class="card-delta down">Este trimestre</div>
+            </div>
+            <div class="card-glow"></div>
+          </div>
+        </div>
+
+        <!-- Gráficas -->
+        <div class="charts-grid">
+          <div class="chart-card reveal">
+            <div class="chart-card-header">
+              <h3>Evolución del Portafolio</h3>
+              <div class="chart-controls">
+                <button class="chart-btn active">1M</button>
+                <button class="chart-btn">3M</button>
+                <button class="chart-btn">6M</button>
+                <button class="chart-btn">1A</button>
+              </div>
+            </div>
+            <canvas id="portfolioChart" height="200"></canvas>
+          </div>
+          <div class="chart-card reveal delay-1">
+            <div class="chart-card-header">
+              <h3>Distribución por Activos</h3>
+            </div>
+            <canvas id="distributionChart" height="200"></canvas>
+          </div>
+        </div>
+
+        <!-- Tabla de activos -->
+        <div class="table-card reveal">
+          <div class="table-header">
+            <h3>Activos en Portafolio</h3>
+            <span class="badge">10 activos</span>
+          </div>
+          <div class="table-wrapper">
+            <table class="asset-table">
+              <thead>
+                <tr>
+                  <th>Activo</th>
+                  <th>Tipo</th>
+                  <th>Precio Actual</th>
+                  <th>Cantidad</th>
+                  <th>Valor Total</th>
+                  <th>Rentabilidad</th>
+                  <th>Estado</th>
+                </tr>
+              </thead>
+              <tbody id="assetTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== PORTAFOLIO ===== -->
+      <section class="page" id="page-portfolio">
+        <div class="page-header">
+          <h1 class="page-title">Mi <span class="accent">Portafolio</span></h1>
+          <p class="page-subtitle">Gestión detallada de tus inversiones</p>
+        </div>
+        <div class="order-panel">
+          <div class="order-card">
+            <h3 class="order-title">Nueva Orden</h3>
+            <div class="order-form">
+              <div class="form-group">
+                <label>Activo</label>
+                <select class="form-control" id="orderAsset">
+                  <option>ECOPETROL (ECO)</option>
+                  <option>BANCOLOMBIA (BCOL)</option>
+                  <option>APPLE (AAPL)</option>
+                  <option>CDT Bancolombia 180d</option>
+                  <option>Bono TES 2028</option>
+                </select>
+              </div>
+              <div class="form-row">
+                <div class="form-group">
+                  <label>Operación</label>
+                  <div class="btn-toggle-group">
+                    <button class="btn-toggle active" id="btnBuy">COMPRAR</button>
+                    <button class="btn-toggle sell" id="btnSell">VENDER</button>
+                  </div>
+                </div>
+                <div class="form-group">
+                  <label>Cantidad</label>
+                  <input type="number" class="form-control" id="orderQty" value="10" min="1"/>
+                </div>
+              </div>
+              <div class="form-row">
+                <div class="form-group">
+                  <label>Precio Est.</label>
+                  <input type="number" class="form-control" id="orderPrice" value="2540" />
+                </div>
+                <div class="form-group">
+                  <label>Total Est.</label>
+                  <input type="text" class="form-control" id="orderTotal" readonly value="$25,400" />
+                </div>
+              </div>
+              <button class="btn-execute" id="executeOrder">⚡ Ejecutar Orden</button>
+            </div>
+          </div>
+          <div class="order-history-card">
+            <h3>Últimas Órdenes</h3>
+            <div class="order-list" id="orderList"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== RENTA VARIABLE ===== -->
+      <section class="page" id="page-equities">
+        <div class="page-header">
+          <h1 class="page-title">Renta <span class="accent">Variable</span></h1>
+          <p class="page-subtitle">Acciones y ETFs en tu portafolio</p>
+        </div>
+        <div class="table-card reveal">
+          <div class="table-header">
+            <h3>Acciones</h3>
+            <span class="badge cyan">Actualizado: simulado</span>
+          </div>
+          <div class="table-wrapper">
+            <table class="asset-table">
+              <thead>
+                <tr>
+                  <th>Ticker</th>
+                  <th>Empresa</th>
+                  <th>Precio</th>
+                  <th>Cambio 24h</th>
+                  <th>Cant.</th>
+                  <th>Valor</th>
+                  <th>P&L</th>
+                </tr>
+              </thead>
+              <tbody id="equityTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="chart-card reveal" style="margin-top:24px">
+          <div class="chart-card-header"><h3>Histórico de Precios — Acciones</h3></div>
+          <canvas id="equityChart" height="180"></canvas>
+        </div>
+      </section>
+
+      <!-- ===== RENTA FIJA ===== -->
+      <section class="page" id="page-fixed">
+        <div class="page-header">
+          <h1 class="page-title">Renta <span class="accent">Fija</span></h1>
+          <p class="page-subtitle">CDTs, bonos y títulos de deuda</p>
+        </div>
+        <div class="cards-grid">
+          <div class="card card--cyan reveal">
+            <div class="card-icon">🏛️</div>
+            <div class="card-body">
+              <div class="card-label">Total Renta Fija</div>
+              <div class="card-value">$24,800,000</div>
+              <div class="card-delta up">3 instrumentos activos</div>
+            </div>
+            <div class="card-glow"></div>
+          </div>
+          <div class="card card--green reveal delay-1">
+            <div class="card-icon">📊</div>
+            <div class="card-body">
+              <div class="card-label">Tasa Promedio</div>
+              <div class="card-value">12.4% E.A.</div>
+              <div class="card-delta up">Por encima del benchmark</div>
+            </div>
+            <div class="card-glow"></div>
+          </div>
+          <div class="card card--purple reveal delay-2">
+            <div class="card-icon">📅</div>
+            <div class="card-body">
+              <div class="card-label">Próximo Vencimiento</div>
+              <div class="card-value">45 días</div>
+              <div class="card-delta">CDT Bancolombia 180d</div>
+            </div>
+            <div class="card-glow"></div>
+          </div>
+        </div>
+        <div class="table-card reveal" style="margin-top:24px">
+          <div class="table-header"><h3>Instrumentos de Renta Fija</h3></div>
+          <div class="table-wrapper">
+            <table class="asset-table">
+              <thead>
+                <tr>
+                  <th>Instrumento</th>
+                  <th>Entidad</th>
+                  <th>Capital</th>
+                  <th>Tasa E.A.</th>
+                  <th>Vencimiento</th>
+                  <th>Rendimiento</th>
+                  <th>Estado</th>
+                </tr>
+              </thead>
+              <tbody id="fixedTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== HISTORIAL ===== -->
+      <section class="page" id="page-history">
+        <div class="page-header">
+          <h1 class="page-title">Historial de <span class="accent">Transacciones</span></h1>
+          <p class="page-subtitle">Registro completo de operaciones</p>
+        </div>
+        <div class="table-card reveal">
+          <div class="table-header">
+            <h3>Transacciones</h3>
+            <div style="display:flex;gap:8px">
+              <button class="chart-btn active">Todas</button>
+              <button class="chart-btn">Compras</button>
+              <button class="chart-btn">Ventas</button>
+              <button class="chart-btn">Dividendos</button>
+            </div>
+          </div>
+          <div class="table-wrapper">
+            <table class="asset-table">
+              <thead>
+                <tr>
+                  <th>Fecha</th>
+                  <th>Activo</th>
+                  <th>Operación</th>
+                  <th>Cantidad</th>
+                  <th>Precio</th>
+                  <th>Total</th>
+                  <th>Comisión</th>
+                  <th>Estado</th>
+                </tr>
+              </thead>
+              <tbody id="historyTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== REPORTES ===== -->
+      <section class="page" id="page-reports">
+        <div class="page-header">
+          <h1 class="page-title">Reportes <span class="accent">Financieros</span></h1>
+          <p class="page-subtitle">Análisis y métricas de rendimiento</p>
+        </div>
+        <div class="cards-grid">
+          <div class="card card--cyan reveal">
+            <div class="card-icon">📉</div>
+            <div class="card-body">
+              <div class="card-label">Sharpe Ratio</div>
+              <div class="card-value">1.82</div>
+              <div class="card-delta up">Excelente gestión de riesgo</div>
+            </div>
+            <div class="card-glow"></div>
+          </div>
+          <div class="card card--purple reveal delay-1">
+            <div class="card-icon">🔄</div>
+            <div class="card-body">
+              <div class="card-label">Beta Portafolio</div>
+              <div class="card-value">0.74</div>
+              <div class="card-delta up">Menos volátil que el mercado</div>
+            </div>
+            <div class="card-glow"></div>
+          </div>
+          <div class="card card--green reveal delay-2">
+            <div class="card-icon">📋</div>
+            <div class="card-body">
+              <div class="card-label">Alpha Anualizado</div>
+              <div class="card-value">+4.2%</div>
+              <div class="card-delta up">Superando benchmark</div>
+            </div>
+            <div class="card-glow"></div>
+          </div>
+          <div class="card card--red reveal delay-3">
+            <div class="card-icon">⚠️</div>
+            <div class="card-body">
+              <div class="card-label">VaR 95% (1 día)</div>
+              <div class="card-value">-$1,230,000</div>
+              <div class="card-delta down">Pérdida máxima estimada</div>
+            </div>
+            <div class="card-glow"></div>
+          </div>
+        </div>
+        <div class="charts-grid" style="margin-top:24px">
+          <div class="chart-card reveal">
+            <div class="chart-card-header"><h3>Rentabilidad Mensual</h3></div>
+            <canvas id="monthlyReturnChart" height="200"></canvas>
+          </div>
+          <div class="chart-card reveal delay-1">
+            <div class="chart-card-header"><h3>Dividendos Históricos</h3></div>
+            <canvas id="dividendChart" height="200"></canvas>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== CONFIGURACIÓN ===== -->
+      <section class="page" id="page-settings">
+        <div class="page-header">
+          <h1 class="page-title">Configuración <span class="accent">del Sistema</span></h1>
+          <p class="page-subtitle">Parámetros del simulador y preferencias</p>
+        </div>
+        <div class="settings-grid">
+          <div class="settings-card reveal">
+            <h3>Perfil del Inversionista</h3>
+            <div class="form-group"><label>Nombre</label><input class="form-control" value="Juan Martínez" /></div>
+            <div class="form-group"><label>Perfil de Riesgo</label>
+              <select class="form-control">
+                <option>Moderado</option>
+                <option>Conservador</option>
+                <option>Agresivo</option>
+              </select>
+            </div>
+            <div class="form-group"><label>Moneda Base</label>
+              <select class="form-control"><option>COP (Peso Colombiano)</option><option>USD</option></select>
+            </div>
+            <button class="btn-execute" style="margin-top:12px">Guardar Perfil</button>
+          </div>
+          <div class="settings-card reveal delay-1">
+            <h3>Parámetros del Broker</h3>
+            <div class="form-group"><label>Comisión por transacción (%)</label><input class="form-control" value="0.3" type="number" step="0.01"/></div>
+            <div class="form-group"><label>Comisión mínima ($)</label><input class="form-control" value="8000" type="number"/></div>
+            <div class="form-group"><label>IVA sobre comisión (%)</label><input class="form-control" value="19" type="number"/></div>
+            <button class="btn-execute" style="margin-top:12px">Actualizar Broker</button>
+          </div>
+          <div class="settings-card reveal delay-2">
+            <h3>Conexión Backend Python</h3>
+            <div class="form-group"><label>Endpoint Base URL</label><input class="form-control" value="http://localhost:8000/api" /></div>
+            <div class="form-group"><label>Intervalo de actualización (seg)</label><input class="form-control" value="30" type="number"/></div>
+            <div class="connection-status">
+              <span class="status-dot offline"></span>
+              <span>Backend desconectado (modo simulado)</span>
+            </div>
+            <button class="btn-execute" style="margin-top:12px">Conectar Backend</button>
+          </div>
+        </div>
+      </section>
+
+    </div><!-- end content-area -->
+  </main>
+
+  <!-- Toast notification -->
+  <div class="toast" id="toast"></div>
+
+  <script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html>
