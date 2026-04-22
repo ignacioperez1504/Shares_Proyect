@@ -84,13 +84,27 @@ const DATA = {
   },
 };
 
-fetch("/resumen")
-  .then(res => res.json())
-  .then(data => {
-      document.getElementById("capitalDisponible").textContent = data.capitalDisponible;
-      document.getElementById("valorPortafolio").textContent = data.valorPortafolio;
-      document.getElementById("rentabilidadNeta").textContent = data.rentabilidadNeta + "%";
-  });
+
+function cargarResumen() {
+  fetch("/resumen")
+    .then(res => res.json())
+    .then(data => {
+      DATA.capitalDisponible = data.capitalDisponible;
+      DATA.valorPortafolio = data.valorPortafolio;
+      DATA.rentabilidadNeta = data.rentabilidadNeta;
+      renderSummaryCards();
+    });
+}
+
+function cargarActivos() {
+  fetch("/activos")
+    .then(res => res.json())
+    .then(data => {
+      DATA.assets = data;
+      renderAssetTable();
+      renderEquityTable();
+    });
+}
 
 /* ============================================================
    2. UTILIDADES
@@ -509,16 +523,35 @@ function setupOrderForm() {
   });
 
   document.getElementById('executeOrder').addEventListener('click', () => {
-    const asset = document.getElementById('orderAsset').value;
-    const q = parseFloat(qty.value);
-    const p = parseFloat(price.value);
-    if (!q || !p) { showToast('⚠ Completa todos los campos', 'var(--red)'); return; }
+      const ticker = document.getElementById('orderAsset').value;
+      const cantidad = parseInt(document.getElementById('orderQty').value);
+      const precio = parseFloat(document.getElementById('orderPrice').value);
 
-    const op = isBuy ? 'COMPRA' : 'VENTA';
-    showToast(`✅ Orden de ${op} ejecutada: ${q} × ${asset}`, isBuy ? 'var(--green)' : 'var(--red)');
-
-    // Aquí conectarás con tu API Python:
-    // fetch('http://localhost:8000/api/orders', { method:'POST', body: JSON.stringify({asset,qty:q,price:p,op}) })
+      fetch("/comprar", {
+          method: "POST",
+          headers: {
+              "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+              ticker: ticker,
+              cantidad: cantidad,
+              precio: precio
+          })
+      })
+      .then(res => res.json())
+      .then(data => {
+          if(data.success){
+              showToast("✅ Compra realizada correctamente", "var(--green)");
+              cargarResumen();
+              cargarActivos();
+          } else {
+              showToast("❌ " + data.message, "var(--red)");
+          }
+      })
+      .catch(err => {
+          showToast("⚠ Error en la compra", "var(--red)");
+          console.error(err);
+      });
   });
 
   updateTotal();
@@ -707,9 +740,8 @@ function animateCounter(el, target, duration = 1200, prefix = '$', decimals = 0)
 document.addEventListener('DOMContentLoaded', () => {
   initParticlesBg();
   updateSimDate();
-  renderSummaryCards();
-  renderAssetTable();
-  renderEquityTable();
+  cargarResumen();
+  cargarActivos();
   renderFixedTable();
   renderHistory();
   renderOrders();
