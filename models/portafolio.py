@@ -15,7 +15,7 @@ class Portafolio:
         comision = self.broker.calcular_comision(monto)
         total = monto + comision
 
-        if self.capital >= total:
+        if self.capital >= total:   
             self.capital -= total
             activo.cantidad += cantidad
             self.activos.append(activo)
@@ -32,6 +32,33 @@ class Portafolio:
             return True
 
         return False
+    
+    def vender_activo(self, activo, cantidad):
+        if activo.cantidad < cantidad:
+            return False
+
+        monto = activo.valor_actual * cantidad
+        comision = self.broker.calcular_comision(monto)
+        neto = monto - comision
+
+        self.capital += neto
+        activo.cantidad -= cantidad
+
+        if activo.cantidad == 0:
+            self.activos.remove(activo)
+
+        transaccion = Transaccion(
+            "VENTA",
+            activo.ticker,
+            cantidad,
+            activo.valor_actual,
+            comision
+        )
+
+        self.transacciones.append(transaccion)
+
+        return True
+
 
     def calcular_valor_total(self):
         total_activos = sum(a.calcular_valor() for a in self.activos)

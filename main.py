@@ -1,4 +1,3 @@
-# main.py
 from flask import Flask, jsonify, render_template, request
 from models.portafolio import Portafolio
 from models.accion import Accion
@@ -16,18 +15,20 @@ portafolio.activos.extend([accion1, accion2])
 
 capital_inicial = 100000
 
+
 @app.route("/")
 def home():
     return render_template("index.html")
+
 
 @app.route("/resumen")
 def resumen():
     return jsonify(portafolio.resumen(capital_inicial))
 
+
 @app.route("/activos")
 def activos():
     activos = []
-
     for a in portafolio.activos:
         activos.append({
             "ticker": a.ticker,
@@ -38,8 +39,8 @@ def activos():
             "costBase": a.precio_compra,
             "currency": "USD"
         })
-
     return jsonify(activos)
+
 
 @app.route("/comprar", methods=["POST"])
 def comprar():
@@ -62,6 +63,50 @@ def comprar():
         return jsonify({"success": True, "message": "Compra realizada"})
     else:
         return jsonify({"success": False, "message": "Capital insuficiente"}), 400
+
+
+@app.route("/vender", methods=["POST"])
+def vender():
+    data = request.get_json()
+
+    ticker = data["ticker"]
+    cantidad = int(data["cantidad"])
+    precio = float(data["precio"])
+
+    print("Ticker recibido:", ticker)
+    print("Cantidad:", cantidad)
+
+    activo = next((a for a in portafolio.activos if a.ticker == ticker), None)
+
+    if activo:
+        activo.valor_actual = precio
+        exito = portafolio.vender_activo(activo, cantidad)
+
+        if exito:
+            return jsonify({
+                "success": True,
+                "message": f"Venta ejecutada: {cantidad} de {ticker}"
+            })
+
+    return jsonify({
+        "success": False,
+        "message": "No fue posible vender el activo"
+    })
+
+@app.route("/historial")
+def historial():
+    return jsonify([
+        {
+            "date": t.fecha.strftime("%Y-%m-%d %H:%M:%S"),
+            "asset": t.activo,
+            "op": t.tipo,
+            "qty": t.cantidad,
+            "price": t.precio,
+            "commission": t.comision
+        }
+        for t in portafolio.transacciones
+    ])
+
 
 if __name__ == "__main__":
     app.run(debug=True)

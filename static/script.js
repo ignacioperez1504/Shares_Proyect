@@ -85,6 +85,15 @@ const DATA = {
 };
 
 
+function cargarHistorial() {
+  fetch("/historial")
+    .then(res => res.json())
+    .then(data => {
+      DATA.history = data;
+      renderHistory();
+    });
+}
+
 function cargarResumen() {
   fetch("/resumen")
     .then(res => res.json())
@@ -527,7 +536,9 @@ function setupOrderForm() {
       const cantidad = parseInt(document.getElementById('orderQty').value);
       const precio = parseFloat(document.getElementById('orderPrice').value);
 
-      fetch("/comprar", {
+      const endpoint = isBuy ? "/comprar" : "/vender";
+
+      fetch(endpoint, {
           method: "POST",
           headers: {
               "Content-Type": "application/json"
@@ -540,18 +551,18 @@ function setupOrderForm() {
       })
       .then(res => res.json())
       .then(data => {
-          if(data.success){
-              showToast("✅ Compra realizada correctamente", "var(--green)");
-              cargarResumen();
-              cargarActivos();
-          } else {
-              showToast("❌ " + data.message, "var(--red)");
-          }
-      })
-      .catch(err => {
-          showToast("⚠ Error en la compra", "var(--red)");
-          console.error(err);
-      });
+        if(data.success){
+            showToast("✅ " + data.message, "var(--green)");
+            cargarResumen();
+            cargarActivos();
+            cargarHistorial();
+            renderHistory();
+            renderOrders();
+            renderEquityTable();
+        } else {
+            showToast("❌ " + data.message, "var(--red)");
+        }
+    });
   });
 
   updateTotal();
