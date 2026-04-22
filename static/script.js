@@ -84,6 +84,14 @@ const DATA = {
   },
 };
 
+fetch("/resumen")
+  .then(res => res.json())
+  .then(data => {
+      document.getElementById("capitalDisponible").textContent = data.capitalDisponible;
+      document.getElementById("valorPortafolio").textContent = data.valorPortafolio;
+      document.getElementById("rentabilidadNeta").textContent = data.rentabilidadNeta + "%";
+  });
+
 /* ============================================================
    2. UTILIDADES
    ============================================================ */
