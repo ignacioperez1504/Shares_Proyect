@@ -1,5 +1,5 @@
 # main.py
-from flask import Flask, jsonify, render_template
+from flask import Flask, jsonify, render_template, request
 from models.portafolio import Portafolio
 from models.accion import Accion
 from models.broker import Broker
@@ -7,14 +7,14 @@ from models.broker import Broker
 app = Flask(__name__)
 
 broker = Broker(comision=0.003)
-portafolio = Portafolio(capital=10000000, broker=broker)
+portafolio = Portafolio(capital=100000, broker=broker)
 
 accion1 = Accion("AAPL", cantidad=10, precio_compra=180, valor_actual=190)
 accion2 = Accion("MSFT", cantidad=5, precio_compra=400, valor_actual=420)
 
 portafolio.activos.extend([accion1, accion2])
 
-capital_inicial = 10000000
+capital_inicial = 100000
 
 @app.route("/")
 def home():
@@ -23,6 +23,45 @@ def home():
 @app.route("/resumen")
 def resumen():
     return jsonify(portafolio.resumen(capital_inicial))
+
+@app.route("/activos")
+def activos():
+    activos = []
+
+    for a in portafolio.activos:
+        activos.append({
+            "ticker": a.ticker,
+            "name": a.ticker,
+            "type": "variable",
+            "price": a.valor_actual,
+            "qty": a.cantidad,
+            "costBase": a.precio_compra,
+            "currency": "USD"
+        })
+
+    return jsonify(activos)
+
+@app.route("/comprar", methods=["POST"])
+def comprar():
+    data = request.json
+
+    ticker = data["ticker"]
+    cantidad = int(data["cantidad"])
+    precio = float(data["precio"])
+
+    accion = Accion(
+        ticker=ticker,
+        cantidad=0,
+        precio_compra=precio,
+        valor_actual=precio
+    )
+
+    exito = portafolio.comprar_activo(accion, cantidad)
+
+    if exito:
+        return jsonify({"success": True, "message": "Compra realizada"})
+    else:
+        return jsonify({"success": False, "message": "Capital insuficiente"}), 400
 
 if __name__ == "__main__":
     app.run(debug=True)
