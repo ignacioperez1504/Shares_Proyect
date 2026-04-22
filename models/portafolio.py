@@ -20,9 +20,17 @@ class Portafolio:
             activo.cantidad += cantidad
             self.activos.append(activo)
 
-            transaccion = Transaccion("compra", activo.nombre, cantidad, activo.valor_actual, comision)
+            transaccion = Transaccion(
+                "COMPRA",
+                activo.ticker,
+                cantidad,
+                activo.valor_actual,
+                comision
+            )
+
             self.transacciones.append(transaccion)
             return True
+
         return False
 
     def calcular_valor_total(self):
