@@ -481,7 +481,24 @@ function renderHistory() {
       </tr>`;
   }).join('');
 }
-
+function renderHistoryFiltered(data) {
+  const tbody = document.getElementById('historyTableBody');
+  tbody.innerHTML = data.map(h => {
+    const total = h.qty * h.price;
+    const opClass = h.op === 'COMPRA' ? 'tag-buy' : h.op === 'VENTA' ? 'tag-sell' : '';
+    return `
+      <tr>
+        <td style="font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--text-muted)">${h.date}</td>
+        <td class="asset-ticker">${h.asset}</td>
+        <td><span class="tag ${opClass}">${h.op}</span></td>
+        <td>${h.qty.toLocaleString()}</td>
+        <td>${h.price > 1000 ? fmt(h.price) : '$' + h.price.toFixed(2)}</td>
+        <td>${total > 1000 ? fmt(total) : '$' + total.toFixed(2)}</td>
+        <td style="color:var(--red)">${h.commission > 0 ? fmt(h.commission) : '—'}</td>
+        <td><span class="tag tag-active">EJECUTADA</span></td>
+      </tr>`;
+  }).join('');
+}
 /* ============================================================
    13. ÓRDENES RECIENTES
    ============================================================ */
@@ -757,7 +774,26 @@ document.addEventListener('DOMContentLoaded', () => {
   renderHistory();
   renderOrders();
   setupOrderForm();
+document.querySelectorAll('#page-history .chart-btn').forEach(btn => {
+  btn.addEventListener('click', function () {
+    document.querySelectorAll('#page-history .chart-btn')
+            .forEach(b => b.classList.remove('active'));
+    this.classList.add('active');
 
+    const filtro = this.textContent.trim();
+    const opMap = {
+      'Compras': 'COMPRA',
+      'Ventas': 'VENTA',
+      'Dividendos': 'DIVIDENDO'
+    };
+    const opKey = opMap[filtro] || filtro.toUpperCase();
+    const filtered = filtro === 'Todas'
+      ? DATA.history
+      : DATA.history.filter(h => h.op === opKey);
+
+    renderHistoryFiltered(filtered);
+  });
+});
   // Charts del dashboard
   setTimeout(() => {
     initDashboardCharts();
@@ -779,12 +815,26 @@ document.addEventListener('DOMContentLoaded', () => {
   }, 400);
 
   // Chart period buttons
-  document.querySelectorAll('.chart-btn').forEach(btn => {
-    btn.addEventListener('click', function() {
-      this.closest('.chart-controls, .table-header')
+  const periodData = {
+    '1M': { labels: ['Sem1','Sem2','Sem3','Sem4'], values: [46300000, 47100000, 47800000, 48760000] },
+    '3M': { labels: ['Feb','Mar','Abr'], values: [44100000, 46300000, 48760000] },
+    '6M': { labels: ['Nov','Dic','Ene','Feb','Mar','Abr'], values: [39500000, 41200000, 40800000, 44100000, 46300000, 48760000] },
+    '1A': { labels: ['Oct','Nov','Dic','Ene','Feb','Mar','Abr'], values: [38000000, 39500000, 41200000, 40800000, 44100000, 46300000, 48760000] },
+  };
+
+  document.querySelectorAll('#page-dashboard .chart-controls .chart-btn').forEach(btn => {
+    btn.addEventListener('click', function () {
+      this.closest('.chart-controls')
           .querySelectorAll('.chart-btn')
           .forEach(b => b.classList.remove('active'));
       this.classList.add('active');
+
+      const period = this.textContent.trim();
+      if (periodData[period] && activeCharts.portfolio) {
+        activeCharts.portfolio.data.labels = periodData[period].labels;
+        activeCharts.portfolio.data.datasets[0].data = periodData[period].values;
+        activeCharts.portfolio.update();
+      }
     });
   });
 

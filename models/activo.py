@@ -1,7 +1,7 @@
-# models/activo.py
 class Activo:
-    def _int_(self, nombre, valor_actual):
+    def __init__(self, nombre):
         self.nombre = nombre
-        self.valor_actual = valor_actual
+        self.valor_actual = 0
+
     def actualizar_valor(self, nuevo_valor):
         self.valor_actual = nuevo_valor

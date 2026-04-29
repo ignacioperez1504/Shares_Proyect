@@ -15,10 +15,16 @@ class Portafolio:
         comision = self.broker.calcular_comision(monto)
         total = monto + comision
 
-        if self.capital >= total:   
+        if self.capital >= total:
             self.capital -= total
-            activo.cantidad += cantidad
-            self.activos.append(activo)
+            
+            # Buscar si el activo ya existe
+            existente = next((a for a in self.activos if a.ticker == activo.ticker), None)
+            if existente:
+                existente.cantidad += cantidad  # sumar al existente
+            else:
+                activo.cantidad = cantidad
+                self.activos.append(activo)     # agregar si es nuevo
 
             transaccion = Transaccion(
                 "COMPRA",
@@ -27,7 +33,6 @@ class Portafolio:
                 activo.valor_actual,
                 comision
             )
-
             self.transacciones.append(transaccion)
             return True
 
