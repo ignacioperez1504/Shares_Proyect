@@ -39,7 +39,8 @@ def activos():
             "price": a.valor_actual,
             "qty": a.cantidad,
             "costBase": a.precio_compra,
-            "currency": "USD"
+            "currency": "USD",
+            "fecha_compra": getattr(a, 'fecha_compra', None)  # 👈 AGREGAR ESTO
         })
     return jsonify(activos)
 

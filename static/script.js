@@ -42,15 +42,16 @@ const DATA = {
   ],
 
   // --- Historial de transacciones ---
+// --- Historial de transacciones ---
   history: [
-    { date:'2024-03-15', asset:'ECO',  op:'COMPRA',    qty:100, price:2480,    commission:7440  },
-    { date:'2024-03-18', asset:'AAPL', op:'COMPRA',    qty:5,   price:182.3,   commission:9115  },
-    { date:'2024-03-22', asset:'BCOL', op:'VENTA',     qty:20,  price:38800,   commission:23280 },
-    { date:'2024-03-28', asset:'MSFT', op:'COMPRA',    qty:3,   price:415.0,   commission:12450 },
-    { date:'2024-04-02', asset:'ECO',  op:'DIVIDENDO', qty:500, price:45,      commission:0     },
-    { date:'2024-04-10', asset:'CDT1', op:'RENOVACIÓN',qty:1,   price:10350000,commission:0     },
-    { date:'2024-04-14', asset:'GOOGL',op:'COMPRA',    qty:2,   price:172.5,   commission:8625  },
-    { date:'2024-04-18', asset:'PFBCOL',op:'VENTA',    qty:10,  price:38200,   commission:22920 },
+    { date:'2026-04-10', asset:'AAPL',  op:'COMPRA',    qty:5,   price:175.50,   commission:4408  },
+    { date:'2026-04-12', asset:'MSFT', op:'COMPRA',    qty:3,   price:410.0,    commission:12300 },
+    { date:'2026-04-14', asset:'GOOGL',op:'COMPRA',    qty:2,   price:168.5,    commission:8425  },
+    { date:'2026-04-15', asset:'AMZN', op:'COMPRA',    qty:4,   price:189.75,   commission:15192 },
+    { date:'2026-04-16', asset:'NVDA', op:'COMPRA',    qty:6,   price:920.00,   commission:55440 },
+    { date:'2026-04-17', asset:'TSLA', op:'COMPRA',    qty:10,  price:245.50,   commission:24550 },
+    { date:'2026-04-18', asset:'META', op:'COMPRA',    qty:8,   price:512.30,   commission:41184 },
+    { date:'2026-04-20', asset:'AAPL', op:'VENTA',     qty:2,   price:189.50,   commission:3795  },
   ],
 
   // --- Órdenes recientes ---
@@ -800,11 +801,26 @@ function cerrarModal() {
 }
 
 function obtenerFechaCompra(ticker) {
+  // Primero, buscar en los activos del portafolio (datos del backend)
+  const activo = DATA.assets.find(a => a.ticker === ticker);
+  if (activo && activo.fecha_compra) {
+    console.log(`${ticker} fecha_compra del backend:`, activo.fecha_compra);
+    return activo.fecha_compra;
+  }
+  
+  // Si no está en activos, buscar en el historial
   const transaccion = DATA.history.find(h => h.asset === ticker && h.op === 'COMPRA');
-  if (transaccion) return transaccion.date.split(' ')[0];
-  const haceUnMes = new Date();
-  haceUnMes.setMonth(haceUnMes.getMonth() - 1);
-  return haceUnMes.toISOString().split('T')[0];
+  if (transaccion) {
+    console.log(`${ticker} encontrado en historial:`, transaccion.date);
+    return transaccion.date.split(' ')[0];
+  }
+  
+  // Fallback: usar ayer
+  const ayer = new Date();
+  ayer.setDate(ayer.getDate() - 1);
+  const fechaDefault = ayer.toISOString().split('T')[0];
+  console.log(`${ticker} sin fecha, usando ayer:`, fechaDefault);
+  return fechaDefault;
 }
 
 /* ============================================================
