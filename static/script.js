@@ -148,6 +148,31 @@ const navItems   = document.querySelectorAll('.nav-item');
 const pages      = document.querySelectorAll('.page');
 let activeCharts = {};
 
+function initHistoryFilters() {
+  const opMap = {
+    'Compras': 'COMPRA',
+    'Ventas': 'VENTA',
+    'Dividendos': 'DIVIDENDO'
+  };
+
+  const btns = document.querySelectorAll('#page-history .chart-btn');
+  
+  btns.forEach(btn => {
+    btn.addEventListener('click', function () {
+      btns.forEach(b => b.classList.remove('active'));
+      this.classList.add('active');
+
+      const filtro = this.textContent.trim();
+      const opKey = opMap[filtro];
+      const filtered = filtro === 'Todas'
+        ? DATA.history
+        : DATA.history.filter(h => h.op === opKey);
+
+      renderHistory(filtered);
+    });
+  });
+}
+
 function navigateTo(section) {
   navItems.forEach(n => n.classList.remove('active'));
   pages.forEach(p => p.classList.remove('active'));
@@ -161,6 +186,10 @@ function navigateTo(section) {
     triggerReveal(page);
     if (section === 'reports') initReportCharts();
     if (section === 'equities') initEquityChart();
+    if (section === 'history' && !activeCharts.historyInit) {
+      initHistoryFilters();
+      activeCharts.historyInit = true;
+    }
   }
 
   if (window.innerWidth <= 840) {
@@ -462,9 +491,9 @@ function renderFixedTable() {
    12. HISTORIAL
    ============================================================ */
 
-function renderHistory() {
+function renderHistory(data = DATA.history) {
   const tbody = document.getElementById('historyTableBody');
-  tbody.innerHTML = DATA.history.map(h => {
+  tbody.innerHTML = data.map(h => {
     const total = h.qty * h.price;
     const opClass = h.op === 'COMPRA' ? 'tag-buy' : h.op === 'VENTA' ? 'tag-sell' : '';
     const statusTag = `<span class="tag tag-active">EJECUTADA</span>`;
@@ -481,24 +510,7 @@ function renderHistory() {
       </tr>`;
   }).join('');
 }
-function renderHistoryFiltered(data) {
-  const tbody = document.getElementById('historyTableBody');
-  tbody.innerHTML = data.map(h => {
-    const total = h.qty * h.price;
-    const opClass = h.op === 'COMPRA' ? 'tag-buy' : h.op === 'VENTA' ? 'tag-sell' : '';
-    return `
-      <tr>
-        <td style="font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--text-muted)">${h.date}</td>
-        <td class="asset-ticker">${h.asset}</td>
-        <td><span class="tag ${opClass}">${h.op}</span></td>
-        <td>${h.qty.toLocaleString()}</td>
-        <td>${h.price > 1000 ? fmt(h.price) : '$' + h.price.toFixed(2)}</td>
-        <td>${total > 1000 ? fmt(total) : '$' + total.toFixed(2)}</td>
-        <td style="color:var(--red)">${h.commission > 0 ? fmt(h.commission) : '—'}</td>
-        <td><span class="tag tag-active">EJECUTADA</span></td>
-      </tr>`;
-  }).join('');
-}
+
 /* ============================================================
    13. ÓRDENES RECIENTES
    ============================================================ */
@@ -592,20 +604,18 @@ function setupOrderForm() {
 function initReportCharts() {
   if (activeCharts.monthly) return;
 
+  const baseScales = {
+    x: { grid: { color: 'rgba(0,245,255,0.06)' }, ticks: { color: '#5a7090', font: { family: 'JetBrains Mono', size: 11 } } },
+    y: { grid: { color: 'rgba(0,245,255,0.06)' }, ticks: { color: '#5a7090', font: { family: 'JetBrains Mono', size: 11 } } }
+  };
+
   const opts = (color) => ({
     responsive: true,
     plugins: {
       legend: { display: false },
-      tooltip: {
-        backgroundColor: 'rgba(8,13,24,0.95)',
-        borderColor: color, borderWidth: 1,
-        titleColor: color, bodyColor: '#e8f0ff',
-      }
+      tooltip: { backgroundColor: 'rgba(8,13,24,0.95)', borderColor: color, borderWidth: 1, titleColor: color, bodyColor: '#e8f0ff' }
     },
-    scales: {
-      x: { grid: { color: 'rgba(0,245,255,0.06)' }, ticks: { color: '#5a7090', font: { family: 'JetBrains Mono', size: 11 } } },
-      y: { grid: { color: 'rgba(0,245,255,0.06)' }, ticks: { color: '#5a7090', font: { family: 'JetBrains Mono', size: 11 } } }
-    }
+    scales: baseScales
   });
 
   // Monthly returns bar
@@ -762,7 +772,28 @@ function animateCounter(el, target, duration = 1200, prefix = '$', decimals = 0)
 }
 
 /* ============================================================
-   18. INICIALIZACIÓN
+   18. ACTUALIZACIÓN DE PRECIOS (yFinance)
+   ============================================================ */
+
+function actualizarPrecios() {
+  fetch("/precios")
+    .then(res => res.json())
+    .then(precios => {
+      DATA.assets.forEach(a => {
+        if (precios[a.ticker]) {
+          a.price = precios[a.ticker];
+        }
+      });
+      renderAssetTable();
+      renderEquityTable();
+      cargarResumen();
+      showToast("📡 Precios actualizados", "var(--cyan)");
+    })
+    .catch(() => showToast("⚠️ Error actualizando precios", "var(--red)"));
+}
+
+/* ============================================================
+   19. INICIALIZACIÓN
    ============================================================ */
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -770,30 +801,16 @@ document.addEventListener('DOMContentLoaded', () => {
   updateSimDate();
   cargarResumen();
   cargarActivos();
+  cargarHistorial();
   renderFixedTable();
   renderHistory();
   renderOrders();
   setupOrderForm();
-document.querySelectorAll('#page-history .chart-btn').forEach(btn => {
-  btn.addEventListener('click', function () {
-    document.querySelectorAll('#page-history .chart-btn')
-            .forEach(b => b.classList.remove('active'));
-    this.classList.add('active');
 
-    const filtro = this.textContent.trim();
-    const opMap = {
-      'Compras': 'COMPRA',
-      'Ventas': 'VENTA',
-      'Dividendos': 'DIVIDENDO'
-    };
-    const opKey = opMap[filtro] || filtro.toUpperCase();
-    const filtered = filtro === 'Todas'
-      ? DATA.history
-      : DATA.history.filter(h => h.op === opKey);
+  // Actualización de precios en tiempo real
+  actualizarPrecios();
+  setInterval(actualizarPrecios, 60000);
 
-    renderHistoryFiltered(filtered);
-  });
-});
   // Charts del dashboard
   setTimeout(() => {
     initDashboardCharts();

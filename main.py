@@ -1,4 +1,5 @@
 from flask import Flask, jsonify, render_template, request
+import yfinance as yf
 from models.portafolio import Portafolio
 from models.accion import Accion
 from models.broker import Broker
@@ -107,6 +108,20 @@ def historial():
         for t in portafolio.transacciones
     ])
 
+@app.route("/precios")
+def precios():
+    resultado = {}
+    for activo in portafolio.activos:
+        try:
+            data = yf.Ticker(activo.ticker)
+            hist = data.history(period="1d")
+            if not hist.empty:
+                precio = round(float(hist['Close'].iloc[-1]), 2)
+                resultado[activo.ticker] = precio
+                activo.valor_actual = precio
+        except:
+            resultado[activo.ticker] = activo.valor_actual
+    return jsonify(resultado)
 
 if __name__ == "__main__":
     app.run(debug=True)
