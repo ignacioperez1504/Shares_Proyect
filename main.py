@@ -1,5 +1,6 @@
 from flask import Flask, jsonify, render_template, request
 import yfinance as yf
+from datetime import datetime, timedelta
 from models.portafolio import Portafolio
 from models.accion import Accion
 from models.broker import Broker
@@ -9,17 +10,17 @@ app = Flask(__name__)
 broker = Broker(comision=0.003)
 portafolio = Portafolio(capital=100000, broker=broker)
 
-accion1 = Accion("AAPL", cantidad=10, precio_compra=180, valor_actual=190)
-accion2 = Accion("MSFT", cantidad=5, precio_compra=400, valor_actual=420)
+ACCIONES_DISPONIBLES = ["AAPL", "MSFT", "GOOGL", "AMZN", "TSLA", "NVDA", "META", "JPM", "ECO.CL", "PFBCOL.CL"]
 
-portafolio.activos.extend([accion1, accion2])
+# No precargar acciones, solo disponibles para comprar
+# portafolio.activos.extend([accion1, accion2])
 
 capital_inicial = 100000
 
 
 @app.route("/")
 def home():
-    return render_template("index.html")
+    return render_template("index.html")    
 
 
 @app.route("/resumen")
@@ -46,22 +47,30 @@ def activos():
 @app.route("/comprar", methods=["POST"])
 def comprar():
     data = request.json
-
     ticker = data["ticker"]
     cantidad = int(data["cantidad"])
-    precio = float(data["precio"])
-
+    fecha_compra = data.get("fecha_compra", None)
+    
+    if fecha_compra:
+        hist = yf.Ticker(ticker).history(start=fecha_compra, period="5d")
+        if hist.empty:
+            return jsonify({"success": False, "message": "Sin datos para esa fecha"}), 400
+        precio = round(float(hist['Close'].iloc[0]), 2)
+    else:
+        precio = float(data["precio"])
+    
     accion = Accion(
         ticker=ticker,
         cantidad=0,
         precio_compra=precio,
         valor_actual=precio
     )
-
+    accion.fecha_compra = fecha_compra or datetime.today().strftime("%Y-%m-%d")
+    
     exito = portafolio.comprar_activo(accion, cantidad)
-
+    
     if exito:
-        return jsonify({"success": True, "message": "Compra realizada"})
+        return jsonify({"success": True, "message": f"Compra realizada a ${precio}", "precio": precio})
     else:
         return jsonify({"success": False, "message": "Capital insuficiente"}), 400
 
@@ -121,6 +130,93 @@ def precios():
                 activo.valor_actual = precio
         except:
             resultado[activo.ticker] = activo.valor_actual
+    return jsonify(resultado)
+
+@app.route("/historico")
+def historico():
+    ticker = request.args.get("ticker")
+    fecha = request.args.get("fecha")  # formato YYYY-MM-DD
+    
+    data = yf.Ticker(ticker)
+    hist = data.history(start=fecha, end=datetime.today().strftime("%Y-%m-%d"))
+    
+    if hist.empty:
+        return jsonify({"error": "Sin datos"}), 404
+    
+    precio_compra = round(float(hist['Close'].iloc[0]), 2)
+    
+    trayectoria = [
+        {
+            "fecha": str(idx.date()),
+            "precio": round(float(row['Close']), 2),
+            "pct": round(((float(row['Close']) - precio_compra) / precio_compra) * 100, 2)
+        }
+        for idx, row in hist.iterrows()
+    ]
+    
+    return jsonify({
+        "ticker": ticker,
+        "precio_compra": precio_compra,
+        "precio_actual": trayectoria[-1]["precio"],
+        "pct_total": trayectoria[-1]["pct"],
+        "trayectoria": trayectoria
+    })
+
+@app.route("/dias-no-habiles")
+def dias_no_habiles():
+    ticker = "AAPL"
+    hace_un_anio = (datetime.today() - timedelta(days=365)).strftime("%Y-%m-%d")
+    hoy = datetime.today().strftime("%Y-%m-%d")
+    
+    data = yf.Ticker(ticker)
+    hist = data.history(start=hace_un_anio, end=hoy)
+    
+    fechas_habiles = set(str(idx.date()) for idx in hist.index)
+    
+    todas_las_fechas = []
+    current = datetime.strptime(hace_un_anio, "%Y-%m-%d")
+    end = datetime.strptime(hoy, "%Y-%m-%d")
+    while current <= end:
+        fecha_str = current.strftime("%Y-%m-%d")
+        if fecha_str not in fechas_habiles:
+            todas_las_fechas.append(fecha_str)
+        current += timedelta(days=1)
+    
+    return jsonify(todas_las_fechas)
+
+@app.route("/trayectoria-portafolio")
+def trayectoria_portafolio():
+    if not portafolio.activos:
+        return jsonify([])
+    
+    fechas_compra = [
+        getattr(a, 'fecha_compra', datetime.today().strftime("%Y-%m-%d"))
+        for a in portafolio.activos
+    ]
+    fecha_inicio = min(fechas_compra)
+    hoy = datetime.today().strftime("%Y-%m-%d")
+    
+    historicos = {}
+    for activo in portafolio.activos:
+        hist = yf.Ticker(activo.ticker).history(start=fecha_inicio, end=hoy)
+        historicos[activo.ticker] = {
+            str(idx.date()): round(float(row['Close']), 2)
+            for idx, row in hist.iterrows()
+        }
+    
+    all_dates = sorted(set(
+        fecha for ticker_hist in historicos.values()
+        for fecha in ticker_hist.keys()
+    ))
+    
+    resultado = []
+    for fecha in all_dates:
+        valor_total = portafolio.capital
+        for activo in portafolio.activos:
+            precio_dia = historicos.get(activo.ticker, {}).get(fecha, activo.valor_actual)
+            valor_total += precio_dia * activo.cantidad
+        resultado.append({"fecha": fecha, "valor": round(valor_total, 2)})
+    
     return jsonify(resultado)
 
 if __name__ == "__main__":

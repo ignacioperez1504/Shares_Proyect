@@ -268,7 +268,14 @@ function renderAssetTable() {
         <td style="font-family:'JetBrains Mono',monospace">${a.qty.toLocaleString()}</td>
         <td style="font-family:'JetBrains Mono',monospace">${a.currency === 'USD' ? '$' + (total).toFixed(0) + ' USD' : fmt(total)}</td>
         <td class="${plClass}">${fmtPct(plPct)}</td>
-        <td><span class="tag tag-active">ACTIVO</span></td>
+        <td>
+          <span class="tag tag-active">ACTIVO</span>
+          <button onclick="verTrayectoria('${a.ticker}')" 
+            style="background:none;border:1px solid var(--cyan);color:var(--cyan);
+            border-radius:6px;padding:2px 8px;cursor:pointer;font-size:11px;margin-left:4px">
+            📈
+          </button>
+        </td>
       </tr>`;
   }).join('');
 }
@@ -548,6 +555,40 @@ function setupOrderForm() {
   qty.addEventListener('input', updateTotal);
   price.addEventListener('input', updateTotal);
 
+  const orderDate = document.getElementById('orderDate');
+
+  // Limitar fecha máxima a ayer (no se puede comprar hoy)
+  const ayer = new Date();
+  ayer.setDate(ayer.getDate() - 1);
+  orderDate.max = ayer.toISOString().split('T')[0];
+
+  // Fecha mínima: 1 año atrás
+  const haceUnAnio = new Date();
+  haceUnAnio.setFullYear(haceUnAnio.getFullYear() - 1);
+  orderDate.min = haceUnAnio.toISOString().split('T')[0];
+
+  // Al cambiar fecha o ticker, autocompletar precio real
+  async function autocompletarPrecio() {
+    const ticker = document.getElementById('orderAsset').value;
+    const fecha = orderDate.value;
+    if (!ticker || !fecha) return;
+
+    try {
+      const res = await fetch(`/historico?ticker=${ticker}&fecha=${fecha}`);
+      const data = await res.json();
+      if (data.precio_compra) {
+        document.getElementById('orderPrice').value = data.precio_compra;
+        updateTotal();
+        showToast(`📈 Precio real de ${ticker} el ${fecha}: $${data.precio_compra}`, 'var(--cyan)');
+      }
+    } catch {
+      showToast('⚠️ No se pudo obtener precio para esa fecha', 'var(--red)');
+    }
+  }
+
+  orderDate.addEventListener('change', autocompletarPrecio);
+  document.getElementById('orderAsset').addEventListener('change', autocompletarPrecio);
+
   btnB.addEventListener('click', () => {
     isBuy = true;
     btnB.classList.add('active');
@@ -575,7 +616,8 @@ function setupOrderForm() {
           body: JSON.stringify({
               ticker: ticker,
               cantidad: cantidad,
-              precio: precio
+              precio: precio,
+              fecha_compra: document.getElementById('orderDate').value || null
           })
       })
       .then(res => res.json())
@@ -595,6 +637,72 @@ function setupOrderForm() {
   });
 
   updateTotal();
+}
+
+async function verTrayectoria(ticker) {
+  const res = await fetch(`/historico?ticker=${ticker}&fecha=${obtenerFechaCompra(ticker)}`);
+  const data = await res.json();
+
+  document.getElementById('modalTitle').textContent = `Trayectoria ${ticker}`;
+
+  const pct = data.pct_total;
+  const color = pct >= 0 ? 'var(--green)' : 'var(--red)';
+  document.getElementById('modalBadge').innerHTML = `
+    <span style="color:${color};font-size:24px;font-weight:700">
+      ${pct >= 0 ? '+' : ''}${pct}% desde compra
+    </span>`;
+
+  document.getElementById('modalOverlay').style.display = 'flex';
+
+  const ctx = document.getElementById('trayectoriaChart').getContext('2d');
+  if (window.trayectoriaChartInstance) window.trayectoriaChartInstance.destroy();
+
+  window.trayectoriaChartInstance = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: data.trayectoria.map(d => d.fecha),
+      datasets: [{
+        label: ticker,
+        data: data.trayectoria.map(d => d.precio),
+        borderColor: pct >= 0 ? '#00ff88' : '#ff3366',
+        borderWidth: 2,
+        backgroundColor: pct >= 0 ? 'rgba(0,255,136,0.1)' : 'rgba(255,51,102,0.1)',
+        fill: true,
+        tension: 0.4,
+        pointRadius: 2,
+      }]
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            afterLabel: ctx => {
+              const pctDia = data.trayectoria[ctx.dataIndex].pct;
+              return `P&L: ${pctDia >= 0 ? '+' : ''}${pctDia}%`;
+            }
+          }
+        }
+      },
+      scales: {
+        x: { ticks: { color: '#5a7090', maxTicksLimit: 8 } },
+        y: { ticks: { color: '#5a7090' } }
+      }
+    }
+  });
+}
+
+function cerrarModal() {
+  document.getElementById('modalOverlay').style.display = 'none';
+}
+
+function obtenerFechaCompra(ticker) {
+  const transaccion = DATA.history.find(h => h.asset === ticker && h.op === 'COMPRA');
+  if (transaccion) return transaccion.date.split(' ')[0];
+  const haceUnMes = new Date();
+  haceUnMes.setMonth(haceUnMes.getMonth() - 1);
+  return haceUnMes.toISOString().split('T')[0];
 }
 
 /* ============================================================
@@ -775,21 +883,33 @@ function animateCounter(el, target, duration = 1200, prefix = '$', decimals = 0)
    18. ACTUALIZACIÓN DE PRECIOS (yFinance)
    ============================================================ */
 
-function actualizarPrecios() {
-  fetch("/precios")
-    .then(res => res.json())
-    .then(precios => {
-      DATA.assets.forEach(a => {
-        if (precios[a.ticker]) {
-          a.price = precios[a.ticker];
-        }
-      });
-      renderAssetTable();
-      renderEquityTable();
-      cargarResumen();
-      showToast("📡 Precios actualizados", "var(--cyan)");
-    })
-    .catch(() => showToast("⚠️ Error actualizando precios", "var(--red)"));
+async function actualizarPrecios() {
+  try {
+    const res = await fetch("/precios");
+    const precios = await res.json();
+
+    DATA.assets.forEach(a => {
+      if (precios[a.ticker]) a.price = precios[a.ticker];
+    });
+
+    renderAssetTable();
+    renderEquityTable();
+    cargarResumen();
+
+    // Actualizar gráfica portafolio con datos reales
+    const resTray = await fetch("/trayectoria-portafolio");
+    const trayectoria = await resTray.json();
+
+    if (trayectoria.length > 0 && activeCharts.portfolio) {
+      activeCharts.portfolio.data.labels = trayectoria.map(d => d.fecha);
+      activeCharts.portfolio.data.datasets[0].data = trayectoria.map(d => d.valor);
+      activeCharts.portfolio.update();
+    }
+
+    showToast("📡 Precios actualizados", "var(--cyan)");
+  } catch {
+    showToast("⚠️ Error actualizando precios", "var(--red)");
+  }
 }
 
 /* ============================================================
