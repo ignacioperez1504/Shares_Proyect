@@ -3,12 +3,13 @@ from models.activo import Activo
 import yfinance as yf
 
 class Accion(Activo):
-    def __init__(self, ticker, cantidad, precio_compra, valor_actual=None):
+    def __init__(self, ticker, cantidad, precio_compra, valor_actual=None, fecha_compra=None):
         super().__init__(ticker)
         self.ticker = ticker
         self.cantidad = cantidad
         self.precio_compra = precio_compra
         self.valor_actual = valor_actual if valor_actual else precio_compra
+        self.fecha_compra = fecha_compra  # 👈 AGREGAR ESTO
         self.dividendos = 0
 
     def actualizar_valor(self):

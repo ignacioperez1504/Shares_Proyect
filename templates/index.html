@@ -5,6 +5,31 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>ITradingM — Simulador de Portafolio</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+  <style>
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.7);
+      z-index: 1000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .modal-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 24px;
+      width: 700px;
+      max-width: 95vw;
+    }
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 16px;
+    }
+  </style>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;400;600;700&family=JetBrains+Mono:wght@300;400;700&display=swap" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -184,21 +209,72 @@
         <div class="charts-grid">
           <div class="chart-card reveal">
             <div class="chart-card-header">
-              <h3>Evolución del Portafolio</h3>
+              <h3>Evolución del Activo</h3>
               <div class="chart-controls">
-                <button class="chart-btn active">1M</button>
-                <button class="chart-btn">3M</button>
-                <button class="chart-btn">6M</button>
-                <button class="chart-btn">1A</button>
+                <select id="portfolioAssetSelect" class="form-control" style="
+                  background: var(--bg-input, #0d1525);
+                  border: 1px solid var(--border, #1e3a5f);
+                  color: var(--text-primary, #e8f0ff);
+                  padding: 4px 10px;
+                  border-radius: 8px;
+                  font-family: 'JetBrains Mono', monospace;
+                  font-size: 12px;
+                  cursor: pointer;
+                  min-width: 160px;
+                ">
+                  <option value="">— Selecciona un activo —</option>
+                </select>
               </div>
             </div>
-            <canvas id="portfolioChart" height="200"></canvas>
+            <!-- Badge P&L sobre la gráfica -->
+            <div id="portfolioPnlBadge" style="
+              display: none;
+              margin-bottom: 10px;
+              display: flex;
+              align-items: center;
+              gap: 16px;
+              flex-wrap: wrap;
+            ">
+              <div style="display:flex;flex-direction:column;gap:2px">
+                <span style="font-size:11px;color:var(--text-muted,#5a7090);font-family:'JetBrains Mono',monospace">DESDE COMPRA</span>
+                <span id="pnlDesdeCompra" style="font-size:22px;font-weight:700;font-family:'Orbitron',sans-serif">—</span>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:2px">
+                <span style="font-size:11px;color:var(--text-muted,#5a7090);font-family:'JetBrains Mono',monospace">PRECIO COMPRA</span>
+                <span id="pnlPrecioCompra" style="font-size:14px;color:#e8f0ff;font-family:'JetBrains Mono',monospace">—</span>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:2px">
+                <span style="font-size:11px;color:var(--text-muted,#5a7090);font-family:'JetBrains Mono',monospace">PRECIO HOY</span>
+                <span id="pnlPrecioHoy" style="font-size:14px;color:#e8f0ff;font-family:'JetBrains Mono',monospace">—</span>
+              </div>
+            </div>
+            <div id="portfolioChartEmpty" style="
+              display:flex;align-items:center;justify-content:center;
+              height:200px;color:var(--text-muted,#5a7090);
+              font-family:'JetBrains Mono',monospace;font-size:13px;
+              flex-direction:column;gap:8px;
+            ">
+              <span style="font-size:32px">📊</span>
+              <span>Selecciona un activo para ver su trayectoria</span>
+            </div>
+            <canvas id="portfolioChart" height="200" style="display:none"></canvas>
           </div>
           <div class="chart-card reveal delay-1">
             <div class="chart-card-header">
               <h3>Distribución por Activos</h3>
             </div>
-            <canvas id="distributionChart" height="200"></canvas>
+            <canvas id="distributionChart" height="160"></canvas>
+            <table class="asset-table" id="distributionTable" 
+              style="margin-top:16px;font-size:12px">
+              <thead>
+                <tr>
+                  <th>Categoría</th>
+                  <th>Valor</th>
+                  <th>%</th>
+                </tr>
+              </thead>
+              <tbody id="distributionTableBody"></tbody>
+            </table>
           </div>
         </div>
 
@@ -240,13 +316,22 @@
               <div class="form-group">
                 <label>Activo</label>
                 <select class="form-control" id="orderAsset">
-                  <option value="AAPL">APPLE (AAPL)</option>
-                  <option value="MSFT">MICROSOFT (MSFT)</option>
-                  <option value="ECO">ECOPETROL (ECO)</option>
-                  <option value="BCOL">BANCOLOMBIA (BCOL)</option>
-                  <option value="CDT1">CDT Bancolombia 180d</option>
-                  <option value="TES28">Bono TES 2028</option>
+                  <option value="AAPL">Apple (AAPL)</option>
+                  <option value="MSFT">Microsoft (MSFT)</option>
+                  <option value="GOOGL">Alphabet (GOOGL)</option>
+                  <option value="AMZN">Amazon (AMZN)</option>
+                  <option value="TSLA">Tesla (TSLA)</option>
+                  <option value="NVDA">NVIDIA (NVDA)</option>
+                  <option value="META">Meta (META)</option>
+                  <option value="JPM">JPMorgan (JPM)</option>
+                  <option value="EC">Ecopetrol NYSE (EC)</option>
+                  <option value="CIB">Bancolombia NYSE (CIB)</option>
                 </select>
+              </div>
+              <div class="form-group">
+                <label>Fecha de Compra</label>
+                <input type="date" class="form-control" id="orderDate" />
+                <small style="color:var(--text-muted)">Selecciona la fecha histórica de compra</small>
               </div>
               <div class="form-row">
                 <div class="form-group">
@@ -477,7 +562,20 @@
         </div>
         <div class="charts-grid" style="margin-top:24px">
           <div class="chart-card reveal">
-            <div class="chart-card-header"><h3>Rentabilidad Mensual</h3></div>
+            <div class="chart-card-header">
+              <h3>Rentabilidad</h3>
+              <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+                <select id="rentabilidadTicker" class="form-control" 
+                  style="width:auto;padding:4px 10px;font-size:12px">
+                  <option value="portfolio">Todas</option>
+                </select>
+                <div style="display:flex;gap:4px">
+                  <button class="chart-btn active" data-periodo="dias">Días</button>
+                  <button class="chart-btn" data-periodo="meses">Meses</button>
+                  <button class="chart-btn" data-periodo="anios">Años</button>
+                </div>
+              </div>
+            </div>
             <canvas id="monthlyReturnChart" height="200"></canvas>
           </div>
           <div class="chart-card reveal delay-1">
@@ -534,6 +632,18 @@
 
   <!-- Toast notification -->
   <div class="toast" id="toast"></div>
+
+  <!-- Modal de trayectoria -->
+  <div class="modal-overlay" id="modalOverlay" style="display:none">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 id="modalTitle">Trayectoria</h3>
+        <button onclick="cerrarModal()" style="background:none;border:none;color:var(--text-muted);font-size:20px;cursor:pointer">✕</button>
+      </div>
+      <div id="modalBadge" style="margin-bottom:16px"></div>
+      <canvas id="trayectoriaChart" height="200"></canvas>
+    </div>
+  </div>
 
   <script src="{{ url_for('static', filename='script.js') }}"></script>
 </body>

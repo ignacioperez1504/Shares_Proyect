@@ -42,15 +42,16 @@ const DATA = {
   ],
 
   // --- Historial de transacciones ---
+// --- Historial de transacciones ---
   history: [
-    { date:'2024-03-15', asset:'ECO',  op:'COMPRA',    qty:100, price:2480,    commission:7440  },
-    { date:'2024-03-18', asset:'AAPL', op:'COMPRA',    qty:5,   price:182.3,   commission:9115  },
-    { date:'2024-03-22', asset:'BCOL', op:'VENTA',     qty:20,  price:38800,   commission:23280 },
-    { date:'2024-03-28', asset:'MSFT', op:'COMPRA',    qty:3,   price:415.0,   commission:12450 },
-    { date:'2024-04-02', asset:'ECO',  op:'DIVIDENDO', qty:500, price:45,      commission:0     },
-    { date:'2024-04-10', asset:'CDT1', op:'RENOVACIÓN',qty:1,   price:10350000,commission:0     },
-    { date:'2024-04-14', asset:'GOOGL',op:'COMPRA',    qty:2,   price:172.5,   commission:8625  },
-    { date:'2024-04-18', asset:'PFBCOL',op:'VENTA',    qty:10,  price:38200,   commission:22920 },
+    { date:'2026-04-10', asset:'AAPL',  op:'COMPRA',    qty:5,   price:175.50,   commission:4408  },
+    { date:'2026-04-12', asset:'MSFT', op:'COMPRA',    qty:3,   price:410.0,    commission:12300 },
+    { date:'2026-04-14', asset:'GOOGL',op:'COMPRA',    qty:2,   price:168.5,    commission:8425  },
+    { date:'2026-04-15', asset:'AMZN', op:'COMPRA',    qty:4,   price:189.75,   commission:15192 },
+    { date:'2026-04-16', asset:'NVDA', op:'COMPRA',    qty:6,   price:920.00,   commission:55440 },
+    { date:'2026-04-17', asset:'TSLA', op:'COMPRA',    qty:10,  price:245.50,   commission:24550 },
+    { date:'2026-04-18', asset:'META', op:'COMPRA',    qty:8,   price:512.30,   commission:41184 },
+    { date:'2026-04-20', asset:'AAPL', op:'VENTA',     qty:2,   price:189.50,   commission:3795  },
   ],
 
   // --- Órdenes recientes ---
@@ -112,6 +113,7 @@ function cargarActivos() {
       DATA.assets = data;
       renderAssetTable();
       renderEquityTable();
+      poblarSelectActivos();
     });
 }
 
@@ -268,7 +270,14 @@ function renderAssetTable() {
         <td style="font-family:'JetBrains Mono',monospace">${a.qty.toLocaleString()}</td>
         <td style="font-family:'JetBrains Mono',monospace">${a.currency === 'USD' ? '$' + (total).toFixed(0) + ' USD' : fmt(total)}</td>
         <td class="${plClass}">${fmtPct(plPct)}</td>
-        <td><span class="tag tag-active">ACTIVO</span></td>
+        <td>
+          <span class="tag tag-active">ACTIVO</span>
+          <button onclick="verTrayectoria('${a.ticker}')" 
+            style="background:none;border:1px solid var(--cyan);color:var(--cyan);
+            border-radius:6px;padding:2px 8px;cursor:pointer;font-size:11px;margin-left:4px">
+            📈
+          </button>
+        </td>
       </tr>`;
   }).join('');
 }
@@ -277,63 +286,209 @@ function renderAssetTable() {
    8. GRÁFICAS DASHBOARD
    ============================================================ */
 
-function initDashboardCharts() {
-  // Portfolio evolution
-  const ctxP = document.getElementById('portfolioChart').getContext('2d');
-  const grad = ctxP.createLinearGradient(0, 0, 0, 300);
-  grad.addColorStop(0, 'rgba(0,245,255,0.25)');
-  grad.addColorStop(1, 'rgba(0,245,255,0)');
+function poblarSelectActivos() {
+  const select = document.getElementById('portfolioAssetSelect');
+  if (!select) return;
+  const tickers = DATA.assets.filter(a => a.type === 'variable').map(a => a.ticker);
+  // Mantener opción vacía
+  select.innerHTML = '<option value="">— Selecciona un activo —</option>';
+  tickers.forEach(ticker => {
+    const opt = document.createElement('option');
+    opt.value = ticker;
+    opt.textContent = ticker;
+    select.appendChild(opt);
+  });
+}
 
-  activeCharts.portfolio = new Chart(ctxP, {
-    type: 'line',
-    data: {
-      labels: DATA.portfolioHistory.labels,
-      datasets: [{
-        label: 'Valor Portafolio',
-        data: DATA.portfolioHistory.values,
-        borderColor: '#00f5ff',
-        borderWidth: 2.5,
-        backgroundColor: grad,
-        pointBackgroundColor: '#00f5ff',
-        pointBorderColor: '#050810',
-        pointBorderWidth: 2,
-        pointRadius: 5,
-        pointHoverRadius: 8,
-        fill: true,
-        tension: 0.4,
-      }]
-    },
-    options: {
-      responsive: true,
-      plugins: {
-        legend: { display: false },
-        tooltip: {
-          backgroundColor: 'rgba(8,13,24,0.95)',
+async function cargarGraficaActivo(ticker) {
+  if (!ticker) return;
+
+  const canvas = document.getElementById('portfolioChart');
+  const empty  = document.getElementById('portfolioChartEmpty');
+  const badge  = document.getElementById('portfolioPnlBadge');
+
+  // 🔴 DESTRUIR GRÁFICA EXISTENTE CORRECTAMENTE
+  if (activeCharts.portfolio) {
+    activeCharts.portfolio.destroy();
+    activeCharts.portfolio = null;
+    await new Promise(resolve => setTimeout(resolve, 100));
+  }
+
+  canvas.style.display = 'none';
+  empty.style.display  = 'flex';
+  empty.innerHTML = '<span style="font-size:32px">⏳</span><span>Cargando trayectoria de ' + ticker + '…</span>';
+
+  const fechaCompra = obtenerFechaCompra(ticker);
+
+  try {
+    const res  = await fetch(`/historico?ticker=${ticker}&fecha=${fechaCompra}`);
+    const data = await res.json();
+
+    console.log("Respuesta del servidor:", data); // DEBUG
+
+    if (data.error) {
+      empty.innerHTML = '<span style="font-size:32px">⚠️</span><span>Sin datos para ' + ticker + '</span>';
+      console.error("Error:", data.error);
+      return;
+    }
+
+    // 🔴 VALIDAR QUE trayectoria NO ESTÉ VACÍA
+    if (!data.trayectoria || data.trayectoria.length === 0) {
+      empty.innerHTML = '<span style="font-size:32px">⚠️</span><span>No hay datos en la trayectoria para ' + ticker + '</span>';
+      console.error("Trayectoria vacía:", data);
+      return;
+    }
+
+    const pct      = data.pct_total;
+    const isGreen  = pct >= 0;
+    const color    = isGreen ? '#00ff88' : '#ff3366';
+
+    // Actualizar badge
+    document.getElementById('pnlDesdeCompra').textContent  = (pct >= 0 ? '+' : '') + pct + '%';
+    document.getElementById('pnlDesdeCompra').style.color  = color;
+    document.getElementById('pnlPrecioCompra').textContent = '$' + data.precio_compra;
+    document.getElementById('pnlPrecioHoy').textContent    = '$' + data.precio_actual;
+    badge.style.display = 'flex';
+
+    empty.style.display  = 'none';
+    canvas.style.display = 'block';
+
+    const ctxP = canvas.getContext('2d');
+
+    activeCharts.portfolio = new Chart(ctxP, {
+      type: 'line',
+      data: {
+        labels: data.trayectoria.map(d => d.fecha),
+        datasets: [{
+          label: ticker,
+          data: data.trayectoria.map(d => d.precio),
           borderColor: '#00f5ff',
-          borderWidth: 1,
-          titleColor: '#00f5ff',
-          bodyColor: '#e8f0ff',
-          callbacks: {
-            label: ctx => ' ' + fmt(ctx.parsed.y),
-          }
-        }
+          borderWidth: 2.5,
+          backgroundColor: (context) => {
+            // 🔴 VALIDAR que el índice exista
+            const dataPoint = data.trayectoria[context.dataIndex];
+            if (!dataPoint) return 'rgba(0,255,136,0.15)';
+            
+            const pct = dataPoint.pct;
+            return pct >= 0 
+              ? 'rgba(0,255,136,0.15)' 
+              : 'rgba(255,51,102,0.15)';
+          },
+          pointBackgroundColor: (context) => {
+            // 🔴 VALIDAR que el índice exista
+            const dataPoint = data.trayectoria[context.dataIndex];
+            if (!dataPoint) return '#00f5ff';
+            
+            const pct = dataPoint.pct;
+            return pct >= 0 ? '#00ff88' : '#ff3366';
+          },
+          pointBorderColor: '#050810',
+          pointBorderWidth: 2,
+          pointRadius: 3,
+          pointHoverRadius: 6,
+          fill: true,
+          tension: 0.4,
+        }]
       },
-      scales: {
-        x: {
-          grid: { color: 'rgba(0,245,255,0.06)' },
-          ticks: { color: '#5a7090', font: { family: 'JetBrains Mono', size: 11 } }
+      options: {
+        responsive: true,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            backgroundColor: 'rgba(8,13,24,0.95)',
+            borderColor: '#00f5ff',
+            borderWidth: 1,
+            titleColor: '#00f5ff',
+            bodyColor: '#e8f0ff',
+            callbacks: {
+              label: ctx => {
+                const d = data.trayectoria[ctx.dataIndex];
+                if (!d) return 'Sin datos';
+                
+                const color = d.pct >= 0 ? '🟢' : '🔴';
+                return ` ${color} $${d.precio}  |  P&L: ${d.pct >= 0 ? '+' : ''}${d.pct}%`;
+              }
+            }
+          }
         },
-        y: {
-          grid: { color: 'rgba(0,245,255,0.06)' },
-          ticks: {
-            color: '#5a7090',
-            font: { family: 'JetBrains Mono', size: 11 },
-            callback: v => '$' + (v / 1e6).toFixed(1) + 'M'
+        scales: {
+          x: {
+            grid: { color: 'rgba(255,255,255,0.04)' },
+            ticks: { color: '#5a7090', font: { family: 'JetBrains Mono', size: 10 }, maxTicksLimit: 8 }
+          },
+          y: {
+            grid: { color: 'rgba(255,255,255,0.04)' },
+            ticks: { color: '#5a7090', font: { family: 'JetBrains Mono', size: 10 },
+              callback: v => '$' + v.toLocaleString('en-US', { minimumFractionDigits: 0 })
+            }
           }
         }
       }
+    });
+
+  } catch (e) {
+    empty.style.display = 'flex';
+    empty.innerHTML = '<span style="font-size:32px">❌</span><span>Error: ' + e.message + '</span>';
+    console.error("Error completo:", e);
+  }
+}
+
+async function cargarDistribucion() {
+  try {
+    const res = await fetch("/distribucion");
+    const data = await res.json();
+
+    // Actualizar donut
+    if (activeCharts.distribution) {
+      activeCharts.distribution.data.labels = data.labels;
+      activeCharts.distribution.data.datasets[0].data = data.values;
+      activeCharts.distribution.update();
     }
+
+    // Renderizar tabla
+    const colores = {
+      'Acciones USA': '#00f5ff',
+      'Acciones CO':  '#7b2ff7',
+      'Liquidez':     '#ff3366',
+      'Otros':        '#ffd700',
+    };
+
+    const tbody = document.getElementById('distributionTableBody');
+    if (tbody) {
+      tbody.innerHTML = data.detalle.map(d => `
+        <tr>
+          <td style="display:flex;align-items:center;gap:8px">
+            <span style="width:10px;height:10px;border-radius:50%;
+              background:${colores[d.categoria] || '#00ff88'};
+              display:inline-block"></span>
+            ${d.categoria}
+          </td>
+          <td style="font-family:'JetBrains Mono',monospace">
+            $${d.valor.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}
+          </td>
+          <td style="font-family:'JetBrains Mono',monospace;
+            color:${d.pct > 50 ? 'var(--cyan)' : 'var(--text-muted)'}">
+            ${d.pct}%
+          </td>
+        </tr>`).join('');
+    }
+  } catch(e) {
+    console.error('Error cargando distribución:', e);
+  }
+}
+
+function initPortfolioAssetChart() {
+  poblarSelectActivos();
+  const select = document.getElementById('portfolioAssetSelect');
+  if (!select) return;
+  select.addEventListener('change', () => {
+    cargarGraficaActivo(select.value);
   });
+}
+
+function initDashboardCharts() {
+  // Portfolio evolution — ahora controlada por initPortfolioAssetChart()
+  initPortfolioAssetChart();
 
   // Distribution donut
   const ctxD = document.getElementById('distributionChart').getContext('2d');
@@ -379,6 +534,8 @@ function initDashboardCharts() {
       }
     }
   });
+
+  cargarDistribucion();
 }
 
 /* ============================================================
@@ -635,6 +792,40 @@ function setupOrderForm() {
   qty.addEventListener('input', updateTotal);
   price.addEventListener('input', updateTotal);
 
+  const orderDate = document.getElementById('orderDate');
+
+  // Limitar fecha máxima a ayer (no se puede comprar hoy)
+  const ayer = new Date();
+  ayer.setDate(ayer.getDate() - 1);
+  orderDate.max = ayer.toISOString().split('T')[0];
+
+  // Fecha mínima: 1 año atrás
+  const haceUnAnio = new Date();
+  haceUnAnio.setFullYear(haceUnAnio.getFullYear() - 1);
+  orderDate.min = haceUnAnio.toISOString().split('T')[0];
+
+  // Al cambiar fecha o ticker, autocompletar precio real
+  async function autocompletarPrecio() {
+    const ticker = document.getElementById('orderAsset').value;
+    const fecha = orderDate.value;
+    if (!ticker || !fecha) return;
+
+    try {
+      const res = await fetch(`/historico?ticker=${ticker}&fecha=${fecha}`);
+      const data = await res.json();
+      if (data.precio_compra) {
+        document.getElementById('orderPrice').value = data.precio_compra;
+        updateTotal();
+        showToast(`📈 Precio real de ${ticker} el ${fecha}: $${data.precio_compra}`, 'var(--cyan)');
+      }
+    } catch {
+      showToast('⚠️ No se pudo obtener precio para esa fecha', 'var(--red)');
+    }
+  }
+
+  orderDate.addEventListener('change', autocompletarPrecio);
+  document.getElementById('orderAsset').addEventListener('change', autocompletarPrecio);
+
   btnB.addEventListener('click', () => {
     isBuy = true;
     btnB.classList.add('active');
@@ -662,7 +853,8 @@ function setupOrderForm() {
           body: JSON.stringify({
               ticker: ticker,
               cantidad: cantidad,
-              precio: precio
+              precio: precio,
+              fecha_compra: document.getElementById('orderDate').value || null
           })
       })
       .then(res => res.json())
@@ -684,12 +876,200 @@ function setupOrderForm() {
   updateTotal();
 }
 
+async function verTrayectoria(ticker) {
+  const res = await fetch(`/historico?ticker=${ticker}&fecha=${obtenerFechaCompra(ticker)}`);
+  const data = await res.json();
+
+  document.getElementById('modalTitle').textContent = `Trayectoria ${ticker}`;
+
+  const pct = data.pct_total;
+  const color = pct >= 0 ? 'var(--green)' : 'var(--red)';
+  document.getElementById('modalBadge').innerHTML = `
+    <span style="color:${color};font-size:24px;font-weight:700">
+      ${pct >= 0 ? '+' : ''}${pct}% desde compra
+    </span>`;
+
+  document.getElementById('modalOverlay').style.display = 'flex';
+
+  const ctx = document.getElementById('trayectoriaChart').getContext('2d');
+  if (window.trayectoriaChartInstance) window.trayectoriaChartInstance.destroy();
+
+  window.trayectoriaChartInstance = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: data.trayectoria.map(d => d.fecha),
+      datasets: [{
+        label: ticker,
+        data: data.trayectoria.map(d => d.precio),
+        borderColor: pct >= 0 ? '#00ff88' : '#ff3366',
+        borderWidth: 2,
+        backgroundColor: pct >= 0 ? 'rgba(0,255,136,0.1)' : 'rgba(255,51,102,0.1)',
+        fill: true,
+        tension: 0.4,
+        pointRadius: 2,
+      }]
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            afterLabel: ctx => {
+              const pctDia = data.trayectoria[ctx.dataIndex].pct;
+              return `P&L: ${pctDia >= 0 ? '+' : ''}${pctDia}%`;
+            }
+          }
+        }
+      },
+      scales: {
+        x: { ticks: { color: '#5a7090', maxTicksLimit: 8 } },
+        y: { ticks: { color: '#5a7090' } }
+      }
+    }
+  });
+}
+
+function cerrarModal() {
+  document.getElementById('modalOverlay').style.display = 'none';
+}
+
+function obtenerFechaCompra(ticker) {
+  // Primero, buscar en los activos del portafolio (datos del backend)
+  const activo = DATA.assets.find(a => a.ticker === ticker);
+  if (activo && activo.fecha_compra) {
+    console.log(`${ticker} fecha_compra del backend:`, activo.fecha_compra);
+    return activo.fecha_compra;
+  }
+  
+  // Si no está en activos, buscar en el historial
+  const transaccion = DATA.history.find(h => h.asset === ticker && h.op === 'COMPRA');
+  if (transaccion) {
+    console.log(`${ticker} encontrado en historial:`, transaccion.date);
+    return transaccion.date.split(' ')[0];
+  }
+  
+  // Fallback: usar ayer
+  const ayer = new Date();
+  ayer.setDate(ayer.getDate() - 1);
+  const fechaDefault = ayer.toISOString().split('T')[0];
+  console.log(`${ticker} sin fecha, usando ayer:`, fechaDefault);
+  return fechaDefault;
+}
+
 /* ============================================================
    15. GRÁFICAS DE REPORTES
    ============================================================ */
 
+let rentabilidadPeriodo = 'meses';
+let rentabilidadTicker = 'portfolio';
+
+async function cargarRentabilidad() {
+  try {
+    const res = await fetch(`/rentabilidad?ticker=${rentabilidadTicker}&periodo=${rentabilidadPeriodo}`);
+    const data = await res.json();
+
+    if (data.error || !data.labels.length) {
+      showToast('⚠️ Sin datos de rentabilidad', 'var(--red)');
+      return;
+    }
+
+    const ctx = document.getElementById('monthlyReturnChart').getContext('2d');
+
+    if (activeCharts.monthly) {
+      activeCharts.monthly.destroy();
+      activeCharts.monthly = null;
+    }
+
+    activeCharts.monthly = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: data.labels,
+        datasets: [{
+          label: data.ticker === 'portfolio' ? 'Portafolio' : data.ticker,
+          data: data.values,
+          backgroundColor: data.values.map(v =>
+            v >= 0 ? 'rgba(0,255,136,0.65)' : 'rgba(255,51,102,0.65)'
+          ),
+          borderColor: data.values.map(v =>
+            v >= 0 ? '#00ff88' : '#ff3366'
+          ),
+          borderWidth: 1.5,
+          borderRadius: 4,
+        }]
+      },
+      options: {
+        responsive: true,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            backgroundColor: 'rgba(8,13,24,0.95)',
+            borderColor: '#00f5ff',
+            borderWidth: 1,
+            titleColor: '#00f5ff',
+            bodyColor: '#e8f0ff',
+            callbacks: {
+              label: ctx => {
+                const v = ctx.parsed.y;
+                return ` ${v >= 0 ? '+' : ''}${v}%`;
+              }
+            }
+          }
+        },
+        scales: {
+          x: {
+            grid: { color: 'rgba(0,245,255,0.06)' },
+            ticks: { color: '#5a7090', font: { family: 'JetBrains Mono', size: 11 } }
+          },
+          y: {
+            grid: { color: 'rgba(0,245,255,0.06)' },
+            ticks: {
+              color: '#5a7090',
+              font: { family: 'JetBrains Mono', size: 11 },
+              callback: v => `${v}%`
+            }
+          }
+        }
+      }
+    });
+  } catch (e) {
+    showToast('⚠️ Error cargando rentabilidad', 'var(--red)');
+  }
+}
+
+function poblarDropdownRentabilidad() {
+  const select = document.getElementById('rentabilidadTicker');
+  if (!select) return;
+  
+  select.innerHTML = '<option value="portfolio">Todas</option>';
+  
+  DATA.assets
+    .filter(a => a.type === 'variable')
+    .forEach(a => {
+      const opt = document.createElement('option');
+      opt.value = a.ticker;
+      opt.textContent = a.ticker;
+      select.appendChild(opt);
+    });
+
+  select.addEventListener('change', function() {
+    rentabilidadTicker = this.value;
+    cargarRentabilidad();
+  });
+
+  document.querySelectorAll('#page-reports .chart-btn[data-periodo]').forEach(btn => {
+    btn.addEventListener('click', function() {
+      document.querySelectorAll('#page-reports .chart-btn[data-periodo]')
+              .forEach(b => b.classList.remove('active'));
+      this.classList.add('active');
+      rentabilidadPeriodo = this.dataset.periodo;
+      cargarRentabilidad();
+    });
+  });
+}
+
 function initReportCharts() {
-  if (activeCharts.monthly) return;
+  if (activeCharts.dividends) return;
 
   const baseScales = {
     x: { grid: { color: 'rgba(0,245,255,0.06)' }, ticks: { color: '#5a7090', font: { family: 'JetBrains Mono', size: 11 } } },
@@ -705,27 +1085,8 @@ function initReportCharts() {
     scales: baseScales
   });
 
-  // Monthly returns bar
-  const ctxM = document.getElementById('monthlyReturnChart').getContext('2d');
-  activeCharts.monthly = new Chart(ctxM, {
-    type: 'bar',
-    data: {
-      labels: DATA.monthlyReturns.labels,
-      datasets: [{
-        label: 'Rentabilidad %',
-        data: DATA.monthlyReturns.values,
-        backgroundColor: DATA.monthlyReturns.values.map(v =>
-          v >= 0 ? 'rgba(0,255,136,0.65)' : 'rgba(255,51,102,0.65)'
-        ),
-        borderColor: DATA.monthlyReturns.values.map(v =>
-          v >= 0 ? '#00ff88' : '#ff3366'
-        ),
-        borderWidth: 1.5,
-        borderRadius: 4,
-      }]
-    },
-    options: opts('#00ff88'),
-  });
+  poblarDropdownRentabilidad();
+  cargarRentabilidad();
 
   // Dividend bars
   const ctxDv = document.getElementById('dividendChart').getContext('2d');
@@ -862,21 +1223,30 @@ function animateCounter(el, target, duration = 1200, prefix = '$', decimals = 0)
    18. ACTUALIZACIÓN DE PRECIOS (yFinance)
    ============================================================ */
 
-function actualizarPrecios() {
-  fetch("/precios")
-    .then(res => res.json())
-    .then(precios => {
-      DATA.assets.forEach(a => {
-        if (precios[a.ticker]) {
-          a.price = precios[a.ticker];
-        }
-      });
-      renderAssetTable();
-      renderEquityTable();
-      cargarResumen();
-      showToast("📡 Precios actualizados", "var(--cyan)");
-    })
-    .catch(() => showToast("⚠️ Error actualizando precios", "var(--red)"));
+async function actualizarPrecios() {
+  try {
+    const res = await fetch("/precios");
+    const precios = await res.json();
+
+    DATA.assets.forEach(a => {
+      if (precios[a.ticker]) a.price = precios[a.ticker];
+    });
+
+    renderAssetTable();
+    renderEquityTable();
+    cargarResumen();
+    cargarDistribucion();
+
+    // Refrescar gráfica si hay un activo seleccionado
+    const select = document.getElementById('portfolioAssetSelect');
+    if (select && select.value) {
+      cargarGraficaActivo(select.value);
+    }
+
+    showToast("📡 Precios actualizados", "var(--cyan)");
+  } catch {
+    showToast("⚠️ Error actualizando precios", "var(--red)");
+  }
 }
 
 /* ============================================================
@@ -918,44 +1288,4 @@ document.addEventListener('DOMContentLoaded', () => {
     rentEl.textContent = '+' + DATA.rentabilidadNeta.toFixed(1) + '%';
   }, 400);
 
-  // Chart period buttons
-  const periodData = {
-    '1M': { labels: ['Sem1','Sem2','Sem3','Sem4'], values: [46300000, 47100000, 47800000, 48760000] },
-    '3M': { labels: ['Feb','Mar','Abr'], values: [44100000, 46300000, 48760000] },
-    '6M': { labels: ['Nov','Dic','Ene','Feb','Mar','Abr'], values: [39500000, 41200000, 40800000, 44100000, 46300000, 48760000] },
-    '1A': { labels: ['Oct','Nov','Dic','Ene','Feb','Mar','Abr'], values: [38000000, 39500000, 41200000, 40800000, 44100000, 46300000, 48760000] },
-  };
-
-  document.querySelectorAll('#page-dashboard .chart-controls .chart-btn').forEach(btn => {
-    btn.addEventListener('click', function () {
-      this.closest('.chart-controls')
-          .querySelectorAll('.chart-btn')
-          .forEach(b => b.classList.remove('active'));
-      this.classList.add('active');
-
-      const period = this.textContent.trim();
-      if (periodData[period] && activeCharts.portfolio) {
-        activeCharts.portfolio.data.labels = periodData[period].labels;
-        activeCharts.portfolio.data.datasets[0].data = periodData[period].values;
-        activeCharts.portfolio.update();
-      }
-    });
-  });
-
-  /* ==================================================
-     PUNTO DE CONEXIÓN CON BACKEND PYTHON
-     ==================================================
-     Para conectar tu API, descomenta y adapta:
-
-     async function fetchFromPython(endpoint) {
-       const BASE_URL = 'http://localhost:8000/api';
-       const res = await fetch(`${BASE_URL}/${endpoint}`);
-       return res.json();
-     }
-
-     // Ejemplo de uso:
-     // const portafolio = await fetchFromPython('portfolio/summary');
-     // DATA.capitalDisponible = portafolio.capital;
-     // renderSummaryCards();
-  */
 });
