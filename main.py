@@ -346,5 +346,50 @@ def trayectoria_portafolio():
     
     return jsonify(resultado)
 
+@app.route("/distribucion")
+def distribucion():
+    if not portafolio.activos:
+        return jsonify({
+            "labels": ["Liquidez"],
+            "values": [100],
+            "detalle": [{"categoria": "Liquidez", "valor": portafolio.capital, "pct": 100}]
+        })
+    
+    categorias = {
+        "Acciones USA": 0,
+        "Acciones CO": 0,
+        "Liquidez": portafolio.capital
+    }
+    
+    tickers_usa = ["AAPL", "MSFT", "GOOGL", "AMZN", "TSLA", "NVDA", "META", "JPM"]
+    tickers_co  = ["EC", "CIB"]
+    
+    for activo in portafolio.activos:
+        valor = activo.valor_actual * activo.cantidad
+        if activo.ticker in tickers_usa:
+            categorias["Acciones USA"] += valor
+        elif activo.ticker in tickers_co:
+            categorias["Acciones CO"] += valor
+        else:
+            categorias["Liquidez"] += valor
+    
+    total = sum(categorias.values())
+    
+    detalle = [
+        {
+            "categoria": cat,
+            "valor": round(valor, 2),
+            "pct": round((valor / total) * 100, 1) if total > 0 else 0
+        }
+        for cat, valor in categorias.items()
+        if valor > 0
+    ]
+    
+    return jsonify({
+        "labels": [d["categoria"] for d in detalle],
+        "values": [d["pct"] for d in detalle],
+        "detalle": detalle
+    })
+
 if __name__ == "__main__":
     app.run(debug=True)

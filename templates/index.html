@@ -263,7 +263,18 @@
             <div class="chart-card-header">
               <h3>Distribución por Activos</h3>
             </div>
-            <canvas id="distributionChart" height="200"></canvas>
+            <canvas id="distributionChart" height="160"></canvas>
+            <table class="asset-table" id="distributionTable" 
+              style="margin-top:16px;font-size:12px">
+              <thead>
+                <tr>
+                  <th>Categoría</th>
+                  <th>Valor</th>
+                  <th>%</th>
+                </tr>
+              </thead>
+              <tbody id="distributionTableBody"></tbody>
+            </table>
           </div>
         </div>
 
@@ -313,8 +324,8 @@
                   <option value="NVDA">NVIDIA (NVDA)</option>
                   <option value="META">Meta (META)</option>
                   <option value="JPM">JPMorgan (JPM)</option>
-                  <option value="ECO.CL">Ecopetrol (ECO)</option>
-                  <option value="PFBCOL.CL">Bancolombia (PFBCOL)</option>
+                  <option value="EC">Ecopetrol NYSE (EC)</option>
+                  <option value="CIB">Bancolombia NYSE (CIB)</option>
                 </select>
               </div>
               <div class="form-group">

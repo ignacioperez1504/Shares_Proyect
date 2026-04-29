@@ -432,6 +432,51 @@ async function cargarGraficaActivo(ticker) {
     console.error("Error completo:", e);
   }
 }
+
+async function cargarDistribucion() {
+  try {
+    const res = await fetch("/distribucion");
+    const data = await res.json();
+
+    // Actualizar donut
+    if (activeCharts.distribution) {
+      activeCharts.distribution.data.labels = data.labels;
+      activeCharts.distribution.data.datasets[0].data = data.values;
+      activeCharts.distribution.update();
+    }
+
+    // Renderizar tabla
+    const colores = {
+      'Acciones USA': '#00f5ff',
+      'Acciones CO':  '#7b2ff7',
+      'Liquidez':     '#ff3366',
+      'Otros':        '#ffd700',
+    };
+
+    const tbody = document.getElementById('distributionTableBody');
+    if (tbody) {
+      tbody.innerHTML = data.detalle.map(d => `
+        <tr>
+          <td style="display:flex;align-items:center;gap:8px">
+            <span style="width:10px;height:10px;border-radius:50%;
+              background:${colores[d.categoria] || '#00ff88'};
+              display:inline-block"></span>
+            ${d.categoria}
+          </td>
+          <td style="font-family:'JetBrains Mono',monospace">
+            $${d.valor.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}
+          </td>
+          <td style="font-family:'JetBrains Mono',monospace;
+            color:${d.pct > 50 ? 'var(--cyan)' : 'var(--text-muted)'}">
+            ${d.pct}%
+          </td>
+        </tr>`).join('');
+    }
+  } catch(e) {
+    console.error('Error cargando distribución:', e);
+  }
+}
+
 function initPortfolioAssetChart() {
   poblarSelectActivos();
   const select = document.getElementById('portfolioAssetSelect');
@@ -489,6 +534,8 @@ function initDashboardCharts() {
       }
     }
   });
+
+  cargarDistribucion();
 }
 
 /* ============================================================
@@ -1101,6 +1148,7 @@ async function actualizarPrecios() {
     renderAssetTable();
     renderEquityTable();
     cargarResumen();
+    cargarDistribucion();
 
     // Refrescar gráfica si hay un activo seleccionado
     const select = document.getElementById('portfolioAssetSelect');
