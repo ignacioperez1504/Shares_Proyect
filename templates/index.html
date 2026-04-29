@@ -290,7 +290,7 @@
         <div class="table-card reveal">
           <div class="table-header">
             <h3>Acciones</h3>
-            <span class="badge cyan">Actualizado: simulado</span>
+            <span class="badge cyan">Actualizado: mercado real</span>
           </div>
           <div class="table-wrapper">
             <table class="asset-table">
@@ -310,8 +310,32 @@
           </div>
         </div>
         <div class="chart-card reveal" style="margin-top:24px">
-          <div class="chart-card-header"><h3>Histórico de Precios — Acciones</h3></div>
-          <canvas id="equityChart" height="180"></canvas>
+          <div class="chart-card-header">
+            <div>
+              <h3>Histórico de Precios — Acciones</h3>
+              <p class="chart-subtitle">Selecciona el ticker y el periodo para mostrar datos reales de mercado.</p>
+            </div>
+            <div class="equity-chart-controls">
+              <div class="equity-select-group">
+                <label for="equityTickerSelect">Ticker</label>
+                <select id="equityTickerSelect" class="chart-select">
+                  <option value="AAPL">AAPL</option>
+                  <option value="MSFT">MSFT</option>
+                  <option value="TSLA">TSLA</option>
+                  <option value="GOOGL">GOOGL</option>
+                  <option value="AMZN">AMZN</option>
+                  <option value="NVDA">NVDA</option>
+                  <option value="META">META</option>
+                </select>
+              </div>
+              <div class="chart-controls equity-period-controls">
+                <button class="chart-btn active equity-period" data-range="1M">Último mes</button>
+                <button class="chart-btn equity-period" data-range="1A">Último año</button>
+              </div>
+            </div>
+          </div>
+          <div class="chart-status" id="equityChartStatus">Cargando cotizaciones...</div>
+          <canvas id="equityChart" height="260"></canvas>
         </div>
       </section>
 

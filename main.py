@@ -108,6 +108,34 @@ def historial():
         for t in portafolio.transacciones
     ])
 
+@app.route("/equity-data")
+def equity_data():
+    ticker = request.args.get("ticker", "AAPL").upper()
+    range_key = request.args.get("range", "1M")
+    if range_key == "1A":
+        period = "1y"
+        interval = "1mo"
+    else:
+        period = "1mo"
+        interval = "1d"
+
+    try:
+        data = yf.Ticker(ticker).history(period=period, interval=interval, auto_adjust=True)
+        if data.empty:
+            return jsonify({"error": "No se encontró información para el ticker especificado."}), 400
+
+        labels = [index.strftime("%d %b %Y") for index in data.index]
+        values = [round(float(value), 2) for value in data["Close"]]
+
+        return jsonify({
+            "ticker": ticker,
+            "range": range_key,
+            "labels": labels,
+            "values": values,
+        })
+    except Exception as error:
+        return jsonify({"error": str(error)}), 400
+
 @app.route("/precios")
 def precios():
     resultado = {}

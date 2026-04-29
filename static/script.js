@@ -411,57 +411,144 @@ function renderEquityTable() {
    10. GRÁFICA RENTA VARIABLE
    ============================================================ */
 
-function initEquityChart() {
-  if (activeCharts.equity) return;
-  const ctx = document.getElementById('equityChart');
-  if (!ctx) return;
-  const months = ['Oct','Nov','Dic','Ene','Feb','Mar','Abr'];
-  activeCharts.equity = new Chart(ctx.getContext('2d'), {
-    type: 'line',
-    data: {
-      labels: months,
-      datasets: [
-        {
-          label: 'ECO',
-          data: [1980, 2050, 2200, 2150, 2380, 2480, 2540],
-          borderColor: '#00f5ff', borderWidth: 2, tension: 0.4,
-          pointRadius: 3, fill: false,
-        },
-        {
-          label: 'BCOL',
-          data: [32000, 33500, 35200, 34800, 36100, 37800, 38200],
-          borderColor: '#7b2ff7', borderWidth: 2, tension: 0.4,
-          pointRadius: 3, fill: false,
-        },
-        {
-          label: 'AAPL',
-          data: [148, 155, 168, 162, 175, 185, 189.5],
-          borderColor: '#00ff88', borderWidth: 2, tension: 0.4,
-          pointRadius: 3, fill: false,
-          yAxisID: 'y2',
-        },
-      ]
-    },
-    options: {
-      responsive: true,
-      interaction: { mode: 'index', intersect: false },
-      plugins: {
-        legend: {
-          labels: { color: '#5a7090', font: { family: 'JetBrains Mono', size: 11 } }
-        },
-        tooltip: {
-          backgroundColor: 'rgba(8,13,24,0.95)',
-          borderColor: '#00f5ff', borderWidth: 1,
-          titleColor: '#00f5ff', bodyColor: '#e8f0ff',
-        }
-      },
-      scales: {
-        x: { grid: { color: 'rgba(0,245,255,0.06)' }, ticks: { color: '#5a7090', font: { family: 'JetBrains Mono', size: 11 } } },
-        y: { grid: { color: 'rgba(0,245,255,0.06)' }, ticks: { color: '#5a7090', font: { family: 'JetBrains Mono', size: 11 } } },
-        y2: { position: 'right', grid: { display: false }, ticks: { color: '#00ff88', font: { family: 'JetBrains Mono', size: 11 } } },
-      }
-    }
+const EQUITY_OPTIONS = ['AAPL', 'MSFT', 'TSLA', 'GOOGL', 'AMZN', 'NVDA', 'META'];
+const EQUITY_PERIODS = {
+  '1M': { label: 'Último mes', period: '1mo', interval: '1d' },
+  '1A': { label: 'Último año', period: '1y', interval: '1mo' }
+};
+
+function getSelectedEquityRange() {
+  const active = document.querySelector('.equity-period.active');
+  return active ? active.dataset.range : '1M';
+}
+
+function updateEquityChartStatus(ticker, range) {
+  const status = document.getElementById('equityChartStatus');
+  if (!status) return;
+  status.textContent = `${ticker} · ${EQUITY_PERIODS[range]?.label || 'Último mes'}`;
+}
+
+function getEquityTickerOptions() {
+  const portfolioTickers = DATA.assets
+    .filter(a => a.type === 'variable')
+    .map(a => a.ticker);
+  return Array.from(new Set([...EQUITY_OPTIONS, ...portfolioTickers]));
+}
+
+function setupEquityChartControls() {
+  const select = document.getElementById('equityTickerSelect');
+  if (!select) return;
+
+  const options = getEquityTickerOptions();
+  select.innerHTML = options.map(ticker => `<option value="${ticker}">${ticker}</option>`).join('');
+  select.value = options.includes('AAPL') ? 'AAPL' : options[0];
+
+  if (select.dataset.initialized === 'true') return;
+  select.dataset.initialized = 'true';
+
+  select.addEventListener('change', () => {
+    updateEquityChart(select.value, getSelectedEquityRange());
   });
+
+  document.querySelectorAll('.equity-period').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.equity-period').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      updateEquityChart(select.value, getSelectedEquityRange());
+    });
+  });
+}
+
+function fetchEquityHistory(ticker, range) {
+  const params = new URLSearchParams({ ticker, range });
+  return fetch(`/equity-data?${params.toString()}`).then(res => res.json());
+}
+
+function initEquityChart() {
+  const canvas = document.getElementById('equityChart');
+  if (!canvas) return;
+
+  if (!activeCharts.equity) {
+    activeCharts.equity = new Chart(canvas.getContext('2d'), {
+      type: 'line',
+      data: {
+        labels: [],
+        datasets: [{
+          label: 'Activo',
+          data: [],
+          borderColor: '#00f5ff',
+          backgroundColor: 'rgba(0,245,255,0.12)',
+          borderWidth: 2.5,
+          tension: 0.42,
+          pointRadius: 3,
+          pointHoverRadius: 7,
+          pointBackgroundColor: '#00f5ff',
+          pointBorderColor: '#050810',
+          fill: true,
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            backgroundColor: 'rgba(8,13,24,0.95)',
+            borderColor: '#00f5ff',
+            borderWidth: 1,
+            titleColor: '#00f5ff',
+            bodyColor: '#e8f0ff',
+            callbacks: {
+              label: ctx => `Precio: ${fmt(ctx.parsed.y, 2)}`,
+              title: ctx => ctx[0].label
+            }
+          }
+        },
+        scales: {
+          x: {
+            grid: { color: 'rgba(0,245,255,0.06)' },
+            ticks: { color: '#5a7090', font: { family: 'JetBrains Mono', size: 11 } }
+          },
+          y: {
+            grid: { color: 'rgba(0,245,255,0.06)' },
+            ticks: {
+              color: '#5a7090',
+              font: { family: 'JetBrains Mono', size: 11 },
+              callback: value => `$${value.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
+            }
+          }
+        }
+      }
+    });
+  }
+
+  setupEquityChartControls();
+  const initialTicker = document.getElementById('equityTickerSelect')?.value || 'AAPL';
+  const initialRange = getSelectedEquityRange();
+  updateEquityChart(initialTicker, initialRange);
+}
+
+function updateEquityChart(ticker, range) {
+  if (!activeCharts.equity) return;
+  updateEquityChartStatus(ticker, range);
+
+  fetchEquityHistory(ticker, range)
+    .then(result => {
+      if (!result || result.error) {
+        throw new Error(result?.error || 'No se pudieron cargar los datos');
+      }
+
+      const values = result.values || [];
+      activeCharts.equity.data.labels = result.labels || [];
+      activeCharts.equity.data.datasets[0].label = ticker;
+      activeCharts.equity.data.datasets[0].data = values;
+      activeCharts.equity.update();
+      showToast(`📈 ${ticker} actualizado (${EQUITY_PERIODS[range].label})`, 'var(--cyan)');
+    })
+    .catch(error => {
+      showToast(`⚠️ ${error.message}`, 'var(--red)');
+    });
 }
 
 /* ============================================================
