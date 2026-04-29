@@ -209,15 +209,55 @@
         <div class="charts-grid">
           <div class="chart-card reveal">
             <div class="chart-card-header">
-              <h3>Evolución del Portafolio</h3>
+              <h3>Evolución del Activo</h3>
               <div class="chart-controls">
-                <button class="chart-btn active">1M</button>
-                <button class="chart-btn">3M</button>
-                <button class="chart-btn">6M</button>
-                <button class="chart-btn">1A</button>
+                <select id="portfolioAssetSelect" class="form-control" style="
+                  background: var(--bg-input, #0d1525);
+                  border: 1px solid var(--border, #1e3a5f);
+                  color: var(--text-primary, #e8f0ff);
+                  padding: 4px 10px;
+                  border-radius: 8px;
+                  font-family: 'JetBrains Mono', monospace;
+                  font-size: 12px;
+                  cursor: pointer;
+                  min-width: 160px;
+                ">
+                  <option value="">— Selecciona un activo —</option>
+                </select>
               </div>
             </div>
-            <canvas id="portfolioChart" height="200"></canvas>
+            <!-- Badge P&L sobre la gráfica -->
+            <div id="portfolioPnlBadge" style="
+              display: none;
+              margin-bottom: 10px;
+              display: flex;
+              align-items: center;
+              gap: 16px;
+              flex-wrap: wrap;
+            ">
+              <div style="display:flex;flex-direction:column;gap:2px">
+                <span style="font-size:11px;color:var(--text-muted,#5a7090);font-family:'JetBrains Mono',monospace">DESDE COMPRA</span>
+                <span id="pnlDesdeCompra" style="font-size:22px;font-weight:700;font-family:'Orbitron',sans-serif">—</span>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:2px">
+                <span style="font-size:11px;color:var(--text-muted,#5a7090);font-family:'JetBrains Mono',monospace">PRECIO COMPRA</span>
+                <span id="pnlPrecioCompra" style="font-size:14px;color:#e8f0ff;font-family:'JetBrains Mono',monospace">—</span>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:2px">
+                <span style="font-size:11px;color:var(--text-muted,#5a7090);font-family:'JetBrains Mono',monospace">PRECIO HOY</span>
+                <span id="pnlPrecioHoy" style="font-size:14px;color:#e8f0ff;font-family:'JetBrains Mono',monospace">—</span>
+              </div>
+            </div>
+            <div id="portfolioChartEmpty" style="
+              display:flex;align-items:center;justify-content:center;
+              height:200px;color:var(--text-muted,#5a7090);
+              font-family:'JetBrains Mono',monospace;font-size:13px;
+              flex-direction:column;gap:8px;
+            ">
+              <span style="font-size:32px">📊</span>
+              <span>Selecciona un activo para ver su trayectoria</span>
+            </div>
+            <canvas id="portfolioChart" height="200" style="display:none"></canvas>
           </div>
           <div class="chart-card reveal delay-1">
             <div class="chart-card-header">

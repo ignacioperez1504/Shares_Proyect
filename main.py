@@ -137,52 +137,50 @@ def historico():
     ticker = request.args.get("ticker")
     fecha = request.args.get("fecha")  # formato YYYY-MM-DD
     
-    data = yf.Ticker(ticker)
-    hist = data.history(start=fecha, end=datetime.today().strftime("%Y-%m-%d"))
+    if not ticker or not fecha:
+        return jsonify({"error": "Falta ticker o fecha"}), 400
     
-    if hist.empty:
-        return jsonify({"error": "Sin datos"}), 404
+    try:
+        fecha_inicio = datetime.strptime(fecha, "%Y-%m-%d")
+        hoy = datetime.today()
+        
+        # Si la fecha es futura, ajustamos a ayer
+        ayer = hoy - timedelta(days=1)
+        if fecha_inicio > ayer:
+            fecha_inicio = ayer
+        
+        data = yf.Ticker(ticker)
+        # Obtener datos EXACTAMENTE desde la fecha de compra hasta ayer
+        hist = data.history(
+            start=fecha_inicio.strftime("%Y-%m-%d"),
+            end=ayer.strftime("%Y-%m-%d")
+        )
+        
+        if hist.empty:
+            return jsonify({"error": f"Sin datos para {ticker} desde {fecha}"}), 404
+        
+        precio_compra = round(float(hist['Close'].iloc[0]), 2)
+        
+        trayectoria = [
+            {
+                "fecha": str(idx.date()),
+                "precio": round(float(row['Close']), 2),
+                "pct": round(((float(row['Close']) - precio_compra) / precio_compra) * 100, 2)
+            }
+            for idx, row in hist.iterrows()
+        ]
+        
+        return jsonify({
+            "ticker": ticker,
+            "precio_compra": precio_compra,
+            "precio_actual": trayectoria[-1]["precio"],
+            "pct_total": trayectoria[-1]["pct"],
+            "trayectoria": trayectoria
+        })
     
-    precio_compra = round(float(hist['Close'].iloc[0]), 2)
-    
-    trayectoria = [
-        {
-            "fecha": str(idx.date()),
-            "precio": round(float(row['Close']), 2),
-            "pct": round(((float(row['Close']) - precio_compra) / precio_compra) * 100, 2)
-        }
-        for idx, row in hist.iterrows()
-    ]
-    
-    return jsonify({
-        "ticker": ticker,
-        "precio_compra": precio_compra,
-        "precio_actual": trayectoria[-1]["precio"],
-        "pct_total": trayectoria[-1]["pct"],
-        "trayectoria": trayectoria
-    })
-
-@app.route("/dias-no-habiles")
-def dias_no_habiles():
-    ticker = "AAPL"
-    hace_un_anio = (datetime.today() - timedelta(days=365)).strftime("%Y-%m-%d")
-    hoy = datetime.today().strftime("%Y-%m-%d")
-    
-    data = yf.Ticker(ticker)
-    hist = data.history(start=hace_un_anio, end=hoy)
-    
-    fechas_habiles = set(str(idx.date()) for idx in hist.index)
-    
-    todas_las_fechas = []
-    current = datetime.strptime(hace_un_anio, "%Y-%m-%d")
-    end = datetime.strptime(hoy, "%Y-%m-%d")
-    while current <= end:
-        fecha_str = current.strftime("%Y-%m-%d")
-        if fecha_str not in fechas_habiles:
-            todas_las_fechas.append(fecha_str)
-        current += timedelta(days=1)
-    
-    return jsonify(todas_las_fechas)
+    except Exception as e:
+        print(f"Error en /historico: {e}")
+        return jsonify({"error": str(e)}), 500
 
 @app.route("/trayectoria-portafolio")
 def trayectoria_portafolio():

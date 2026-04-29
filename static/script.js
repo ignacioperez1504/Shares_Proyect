@@ -112,6 +112,7 @@ function cargarActivos() {
       DATA.assets = data;
       renderAssetTable();
       renderEquityTable();
+      poblarSelectActivos();
     });
 }
 
@@ -284,63 +285,164 @@ function renderAssetTable() {
    8. GRÁFICAS DASHBOARD
    ============================================================ */
 
-function initDashboardCharts() {
-  // Portfolio evolution
-  const ctxP = document.getElementById('portfolioChart').getContext('2d');
-  const grad = ctxP.createLinearGradient(0, 0, 0, 300);
-  grad.addColorStop(0, 'rgba(0,245,255,0.25)');
-  grad.addColorStop(1, 'rgba(0,245,255,0)');
+function poblarSelectActivos() {
+  const select = document.getElementById('portfolioAssetSelect');
+  if (!select) return;
+  const tickers = DATA.assets.filter(a => a.type === 'variable').map(a => a.ticker);
+  // Mantener opción vacía
+  select.innerHTML = '<option value="">— Selecciona un activo —</option>';
+  tickers.forEach(ticker => {
+    const opt = document.createElement('option');
+    opt.value = ticker;
+    opt.textContent = ticker;
+    select.appendChild(opt);
+  });
+}
 
-  activeCharts.portfolio = new Chart(ctxP, {
-    type: 'line',
-    data: {
-      labels: DATA.portfolioHistory.labels,
-      datasets: [{
-        label: 'Valor Portafolio',
-        data: DATA.portfolioHistory.values,
-        borderColor: '#00f5ff',
-        borderWidth: 2.5,
-        backgroundColor: grad,
-        pointBackgroundColor: '#00f5ff',
-        pointBorderColor: '#050810',
-        pointBorderWidth: 2,
-        pointRadius: 5,
-        pointHoverRadius: 8,
-        fill: true,
-        tension: 0.4,
-      }]
-    },
-    options: {
-      responsive: true,
-      plugins: {
-        legend: { display: false },
-        tooltip: {
-          backgroundColor: 'rgba(8,13,24,0.95)',
+async function cargarGraficaActivo(ticker) {
+  if (!ticker) return;
+
+  const canvas = document.getElementById('portfolioChart');
+  const empty  = document.getElementById('portfolioChartEmpty');
+  const badge  = document.getElementById('portfolioPnlBadge');
+
+  // 🔴 DESTRUIR GRÁFICA EXISTENTE CORRECTAMENTE
+  if (activeCharts.portfolio) {
+    activeCharts.portfolio.destroy();
+    activeCharts.portfolio = null;
+    await new Promise(resolve => setTimeout(resolve, 100));
+  }
+
+  canvas.style.display = 'none';
+  empty.style.display  = 'flex';
+  empty.innerHTML = '<span style="font-size:32px">⏳</span><span>Cargando trayectoria de ' + ticker + '…</span>';
+
+  const fechaCompra = obtenerFechaCompra(ticker);
+
+  try {
+    const res  = await fetch(`/historico?ticker=${ticker}&fecha=${fechaCompra}`);
+    const data = await res.json();
+
+    console.log("Respuesta del servidor:", data); // DEBUG
+
+    if (data.error) {
+      empty.innerHTML = '<span style="font-size:32px">⚠️</span><span>Sin datos para ' + ticker + '</span>';
+      console.error("Error:", data.error);
+      return;
+    }
+
+    // 🔴 VALIDAR QUE trayectoria NO ESTÉ VACÍA
+    if (!data.trayectoria || data.trayectoria.length === 0) {
+      empty.innerHTML = '<span style="font-size:32px">⚠️</span><span>No hay datos en la trayectoria para ' + ticker + '</span>';
+      console.error("Trayectoria vacía:", data);
+      return;
+    }
+
+    const pct      = data.pct_total;
+    const isGreen  = pct >= 0;
+    const color    = isGreen ? '#00ff88' : '#ff3366';
+
+    // Actualizar badge
+    document.getElementById('pnlDesdeCompra').textContent  = (pct >= 0 ? '+' : '') + pct + '%';
+    document.getElementById('pnlDesdeCompra').style.color  = color;
+    document.getElementById('pnlPrecioCompra').textContent = '$' + data.precio_compra;
+    document.getElementById('pnlPrecioHoy').textContent    = '$' + data.precio_actual;
+    badge.style.display = 'flex';
+
+    empty.style.display  = 'none';
+    canvas.style.display = 'block';
+
+    const ctxP = canvas.getContext('2d');
+
+    activeCharts.portfolio = new Chart(ctxP, {
+      type: 'line',
+      data: {
+        labels: data.trayectoria.map(d => d.fecha),
+        datasets: [{
+          label: ticker,
+          data: data.trayectoria.map(d => d.precio),
           borderColor: '#00f5ff',
-          borderWidth: 1,
-          titleColor: '#00f5ff',
-          bodyColor: '#e8f0ff',
-          callbacks: {
-            label: ctx => ' ' + fmt(ctx.parsed.y),
-          }
-        }
+          borderWidth: 2.5,
+          backgroundColor: (context) => {
+            // 🔴 VALIDAR que el índice exista
+            const dataPoint = data.trayectoria[context.dataIndex];
+            if (!dataPoint) return 'rgba(0,255,136,0.15)';
+            
+            const pct = dataPoint.pct;
+            return pct >= 0 
+              ? 'rgba(0,255,136,0.15)' 
+              : 'rgba(255,51,102,0.15)';
+          },
+          pointBackgroundColor: (context) => {
+            // 🔴 VALIDAR que el índice exista
+            const dataPoint = data.trayectoria[context.dataIndex];
+            if (!dataPoint) return '#00f5ff';
+            
+            const pct = dataPoint.pct;
+            return pct >= 0 ? '#00ff88' : '#ff3366';
+          },
+          pointBorderColor: '#050810',
+          pointBorderWidth: 2,
+          pointRadius: 3,
+          pointHoverRadius: 6,
+          fill: true,
+          tension: 0.4,
+        }]
       },
-      scales: {
-        x: {
-          grid: { color: 'rgba(0,245,255,0.06)' },
-          ticks: { color: '#5a7090', font: { family: 'JetBrains Mono', size: 11 } }
+      options: {
+        responsive: true,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            backgroundColor: 'rgba(8,13,24,0.95)',
+            borderColor: '#00f5ff',
+            borderWidth: 1,
+            titleColor: '#00f5ff',
+            bodyColor: '#e8f0ff',
+            callbacks: {
+              label: ctx => {
+                const d = data.trayectoria[ctx.dataIndex];
+                if (!d) return 'Sin datos';
+                
+                const color = d.pct >= 0 ? '🟢' : '🔴';
+                return ` ${color} $${d.precio}  |  P&L: ${d.pct >= 0 ? '+' : ''}${d.pct}%`;
+              }
+            }
+          }
         },
-        y: {
-          grid: { color: 'rgba(0,245,255,0.06)' },
-          ticks: {
-            color: '#5a7090',
-            font: { family: 'JetBrains Mono', size: 11 },
-            callback: v => '$' + (v / 1e6).toFixed(1) + 'M'
+        scales: {
+          x: {
+            grid: { color: 'rgba(255,255,255,0.04)' },
+            ticks: { color: '#5a7090', font: { family: 'JetBrains Mono', size: 10 }, maxTicksLimit: 8 }
+          },
+          y: {
+            grid: { color: 'rgba(255,255,255,0.04)' },
+            ticks: { color: '#5a7090', font: { family: 'JetBrains Mono', size: 10 },
+              callback: v => '$' + v.toLocaleString('en-US', { minimumFractionDigits: 0 })
+            }
           }
         }
       }
-    }
+    });
+
+  } catch (e) {
+    empty.style.display = 'flex';
+    empty.innerHTML = '<span style="font-size:32px">❌</span><span>Error: ' + e.message + '</span>';
+    console.error("Error completo:", e);
+  }
+}
+function initPortfolioAssetChart() {
+  poblarSelectActivos();
+  const select = document.getElementById('portfolioAssetSelect');
+  if (!select) return;
+  select.addEventListener('change', () => {
+    cargarGraficaActivo(select.value);
   });
+}
+
+function initDashboardCharts() {
+  // Portfolio evolution — ahora controlada por initPortfolioAssetChart()
+  initPortfolioAssetChart();
 
   // Distribution donut
   const ctxD = document.getElementById('distributionChart').getContext('2d');
@@ -896,14 +998,10 @@ async function actualizarPrecios() {
     renderEquityTable();
     cargarResumen();
 
-    // Actualizar gráfica portafolio con datos reales
-    const resTray = await fetch("/trayectoria-portafolio");
-    const trayectoria = await resTray.json();
-
-    if (trayectoria.length > 0 && activeCharts.portfolio) {
-      activeCharts.portfolio.data.labels = trayectoria.map(d => d.fecha);
-      activeCharts.portfolio.data.datasets[0].data = trayectoria.map(d => d.valor);
-      activeCharts.portfolio.update();
+    // Refrescar gráfica si hay un activo seleccionado
+    const select = document.getElementById('portfolioAssetSelect');
+    if (select && select.value) {
+      cargarGraficaActivo(select.value);
     }
 
     showToast("📡 Precios actualizados", "var(--cyan)");
@@ -950,30 +1048,6 @@ document.addEventListener('DOMContentLoaded', () => {
     animateCounter(rentEl, DATA.rentabilidadNeta, 1200, '+', 1);
     rentEl.textContent = '+' + DATA.rentabilidadNeta.toFixed(1) + '%';
   }, 400);
-
-  // Chart period buttons
-  const periodData = {
-    '1M': { labels: ['Sem1','Sem2','Sem3','Sem4'], values: [46300000, 47100000, 47800000, 48760000] },
-    '3M': { labels: ['Feb','Mar','Abr'], values: [44100000, 46300000, 48760000] },
-    '6M': { labels: ['Nov','Dic','Ene','Feb','Mar','Abr'], values: [39500000, 41200000, 40800000, 44100000, 46300000, 48760000] },
-    '1A': { labels: ['Oct','Nov','Dic','Ene','Feb','Mar','Abr'], values: [38000000, 39500000, 41200000, 40800000, 44100000, 46300000, 48760000] },
-  };
-
-  document.querySelectorAll('#page-dashboard .chart-controls .chart-btn').forEach(btn => {
-    btn.addEventListener('click', function () {
-      this.closest('.chart-controls')
-          .querySelectorAll('.chart-btn')
-          .forEach(b => b.classList.remove('active'));
-      this.classList.add('active');
-
-      const period = this.textContent.trim();
-      if (periodData[period] && activeCharts.portfolio) {
-        activeCharts.portfolio.data.labels = periodData[period].labels;
-        activeCharts.portfolio.data.datasets[0].data = periodData[period].values;
-        activeCharts.portfolio.update();
-      }
-    });
-  });
 
   /* ==================================================
      PUNTO DE CONEXIÓN CON BACKEND PYTHON
