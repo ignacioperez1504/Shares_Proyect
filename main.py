@@ -183,6 +183,134 @@ def historico():
         print(f"Error en /historico: {e}")
         return jsonify({"error": str(e)}), 500
 
+@app.route("/rentabilidad")
+def rentabilidad():
+    ticker = request.args.get("ticker", "portfolio")
+    periodo = request.args.get("periodo", "meses")
+    
+    hoy = datetime.today()
+    
+    if periodo == "dias":
+        fecha_inicio = (hoy - timedelta(days=30)).strftime("%Y-%m-%d")
+    elif periodo == "anios":
+        fecha_inicio = (hoy - timedelta(days=365*3)).strftime("%Y-%m-%d")
+    else:
+        fecha_inicio = (hoy - timedelta(days=365)).strftime("%Y-%m-%d")
+    
+    fecha_fin = hoy.strftime("%Y-%m-%d")
+    
+    try:
+        resultado = []
+
+        if ticker == "portfolio":
+            if not portafolio.activos:
+                return jsonify({"labels": [], "values": [], "ticker": "Portfolio"})
+
+            ref = yf.Ticker(portafolio.activos[0].ticker)
+            hist_ref = ref.history(start=fecha_inicio, end=fecha_fin)
+
+            if hist_ref.empty:
+                return jsonify({"labels": [], "values": [], "ticker": "Portfolio"})
+
+            if periodo == "dias":
+                for idx, _ in hist_ref.iterrows():
+                    fecha = str(idx.date())
+                    valor_total = 0
+                    for activo in portafolio.activos:
+                        hist_a = yf.Ticker(activo.ticker).history(start=fecha, period="1d")
+                        if not hist_a.empty:
+                            precio = float(hist_a['Close'].iloc[0])
+                        else:
+                            precio = activo.valor_actual
+                        valor_total += precio * activo.cantidad
+                    costo_total = sum(a.precio_compra * a.cantidad for a in portafolio.activos)
+                    pct = round(((valor_total - costo_total) / costo_total) * 100, 2) if costo_total > 0 else 0
+                    resultado.append({"label": fecha, "value": pct})
+
+            elif periodo == "meses":
+                import pandas as pd
+                tickers_data = {}
+                for activo in portafolio.activos:
+                    h = yf.Ticker(activo.ticker).history(start=fecha_inicio, end=fecha_fin)
+                    if not h.empty:
+                        tickers_data[activo.ticker] = h['Close'].resample('ME').last()
+
+                if tickers_data:
+                    fechas = list(list(tickers_data.values())[0].index)
+                    for fecha in fechas:
+                        valor_total = 0
+                        costo_total = 0
+                        for activo in portafolio.activos:
+                            if activo.ticker in tickers_data:
+                                serie = tickers_data[activo.ticker]
+                                if fecha in serie.index:
+                                    precio = float(serie[fecha])
+                                    valor_total += precio * activo.cantidad
+                                    costo_total += activo.precio_compra * activo.cantidad
+                        pct = round(((valor_total - costo_total) / costo_total) * 100, 2) if costo_total > 0 else 0
+                        resultado.append({"label": fecha.strftime("%b %Y"), "value": pct})
+
+            elif periodo == "anios":
+                import pandas as pd
+                tickers_data = {}
+                for activo in portafolio.activos:
+                    h = yf.Ticker(activo.ticker).history(start=fecha_inicio, end=fecha_fin)
+                    if not h.empty:
+                        tickers_data[activo.ticker] = h['Close'].resample('YE').last()
+
+                if tickers_data:
+                    fechas = list(list(tickers_data.values())[0].index)
+                    for fecha in fechas:
+                        valor_total = 0
+                        costo_total = 0
+                        for activo in portafolio.activos:
+                            if activo.ticker in tickers_data:
+                                serie = tickers_data[activo.ticker]
+                                if fecha in serie.index:
+                                    precio = float(serie[fecha])
+                                    valor_total += precio * activo.cantidad
+                                    costo_total += activo.precio_compra * activo.cantidad
+                        pct = round(((valor_total - costo_total) / costo_total) * 100, 2) if costo_total > 0 else 0
+                        resultado.append({"label": str(fecha.year), "value": pct})
+        else:
+            data = yf.Ticker(ticker)
+            hist = data.history(start=fecha_inicio, end=fecha_fin)
+            
+            if hist.empty:
+                return jsonify({"labels": [], "values": [], "ticker": ticker})
+            
+            precio_base = float(hist['Close'].iloc[0])
+            
+            if periodo == "dias":
+                for idx, row in hist.iterrows():
+                    pct = round(((float(row['Close']) - precio_base) / precio_base) * 100, 2)
+                    resultado.append({"label": str(idx.date()), "value": pct})
+            
+            elif periodo == "meses":
+                import pandas as pd
+                hist_m = hist['Close'].resample('ME').last()
+                for fecha, precio in hist_m.items():
+                    pct = round(((float(precio) - precio_base) / precio_base) * 100, 2)
+                    resultado.append({"label": fecha.strftime("%b %Y"), "value": pct})
+            
+            elif periodo == "anios":
+                import pandas as pd
+                hist_y = hist['Close'].resample('YE').last()
+                for fecha, precio in hist_y.items():
+                    pct = round(((float(precio) - precio_base) / precio_base) * 100, 2)
+                    resultado.append({"label": str(fecha.year), "value": pct})
+
+        labels = [r["label"] for r in resultado]
+        values = [r["value"] for r in resultado]
+        
+        return jsonify({
+            "labels": labels,
+            "values": values,
+            "ticker": ticker
+        })
+    except Exception as e:
+        return jsonify({"error": str(e), "labels": [], "values": []}), 500
+
 @app.route("/trayectoria-portafolio")
 def trayectoria_portafolio():
     if not portafolio.activos:

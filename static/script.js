@@ -827,8 +827,115 @@ function obtenerFechaCompra(ticker) {
    15. GRÁFICAS DE REPORTES
    ============================================================ */
 
+let rentabilidadPeriodo = 'meses';
+let rentabilidadTicker = 'portfolio';
+
+async function cargarRentabilidad() {
+  try {
+    const res = await fetch(`/rentabilidad?ticker=${rentabilidadTicker}&periodo=${rentabilidadPeriodo}`);
+    const data = await res.json();
+
+    if (data.error || !data.labels.length) {
+      showToast('⚠️ Sin datos de rentabilidad', 'var(--red)');
+      return;
+    }
+
+    const ctx = document.getElementById('monthlyReturnChart').getContext('2d');
+
+    if (activeCharts.monthly) {
+      activeCharts.monthly.destroy();
+      activeCharts.monthly = null;
+    }
+
+    activeCharts.monthly = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: data.labels,
+        datasets: [{
+          label: data.ticker === 'portfolio' ? 'Portafolio' : data.ticker,
+          data: data.values,
+          backgroundColor: data.values.map(v =>
+            v >= 0 ? 'rgba(0,255,136,0.65)' : 'rgba(255,51,102,0.65)'
+          ),
+          borderColor: data.values.map(v =>
+            v >= 0 ? '#00ff88' : '#ff3366'
+          ),
+          borderWidth: 1.5,
+          borderRadius: 4,
+        }]
+      },
+      options: {
+        responsive: true,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            backgroundColor: 'rgba(8,13,24,0.95)',
+            borderColor: '#00f5ff',
+            borderWidth: 1,
+            titleColor: '#00f5ff',
+            bodyColor: '#e8f0ff',
+            callbacks: {
+              label: ctx => {
+                const v = ctx.parsed.y;
+                return ` ${v >= 0 ? '+' : ''}${v}%`;
+              }
+            }
+          }
+        },
+        scales: {
+          x: {
+            grid: { color: 'rgba(0,245,255,0.06)' },
+            ticks: { color: '#5a7090', font: { family: 'JetBrains Mono', size: 11 } }
+          },
+          y: {
+            grid: { color: 'rgba(0,245,255,0.06)' },
+            ticks: {
+              color: '#5a7090',
+              font: { family: 'JetBrains Mono', size: 11 },
+              callback: v => `${v}%`
+            }
+          }
+        }
+      }
+    });
+  } catch (e) {
+    showToast('⚠️ Error cargando rentabilidad', 'var(--red)');
+  }
+}
+
+function poblarDropdownRentabilidad() {
+  const select = document.getElementById('rentabilidadTicker');
+  if (!select) return;
+  
+  select.innerHTML = '<option value="portfolio">Todas</option>';
+  
+  DATA.assets
+    .filter(a => a.type === 'variable')
+    .forEach(a => {
+      const opt = document.createElement('option');
+      opt.value = a.ticker;
+      opt.textContent = a.ticker;
+      select.appendChild(opt);
+    });
+
+  select.addEventListener('change', function() {
+    rentabilidadTicker = this.value;
+    cargarRentabilidad();
+  });
+
+  document.querySelectorAll('#page-reports .chart-btn[data-periodo]').forEach(btn => {
+    btn.addEventListener('click', function() {
+      document.querySelectorAll('#page-reports .chart-btn[data-periodo]')
+              .forEach(b => b.classList.remove('active'));
+      this.classList.add('active');
+      rentabilidadPeriodo = this.dataset.periodo;
+      cargarRentabilidad();
+    });
+  });
+}
+
 function initReportCharts() {
-  if (activeCharts.monthly) return;
+  if (activeCharts.dividends) return;
 
   const baseScales = {
     x: { grid: { color: 'rgba(0,245,255,0.06)' }, ticks: { color: '#5a7090', font: { family: 'JetBrains Mono', size: 11 } } },
@@ -844,27 +951,8 @@ function initReportCharts() {
     scales: baseScales
   });
 
-  // Monthly returns bar
-  const ctxM = document.getElementById('monthlyReturnChart').getContext('2d');
-  activeCharts.monthly = new Chart(ctxM, {
-    type: 'bar',
-    data: {
-      labels: DATA.monthlyReturns.labels,
-      datasets: [{
-        label: 'Rentabilidad %',
-        data: DATA.monthlyReturns.values,
-        backgroundColor: DATA.monthlyReturns.values.map(v =>
-          v >= 0 ? 'rgba(0,255,136,0.65)' : 'rgba(255,51,102,0.65)'
-        ),
-        borderColor: DATA.monthlyReturns.values.map(v =>
-          v >= 0 ? '#00ff88' : '#ff3366'
-        ),
-        borderWidth: 1.5,
-        borderRadius: 4,
-      }]
-    },
-    options: opts('#00ff88'),
-  });
+  poblarDropdownRentabilidad();
+  cargarRentabilidad();
 
   // Dividend bars
   const ctxDv = document.getElementById('dividendChart').getContext('2d');
@@ -1065,20 +1153,4 @@ document.addEventListener('DOMContentLoaded', () => {
     rentEl.textContent = '+' + DATA.rentabilidadNeta.toFixed(1) + '%';
   }, 400);
 
-  /* ==================================================
-     PUNTO DE CONEXIÓN CON BACKEND PYTHON
-     ==================================================
-     Para conectar tu API, descomenta y adapta:
-
-     async function fetchFromPython(endpoint) {
-       const BASE_URL = 'http://localhost:8000/api';
-       const res = await fetch(`${BASE_URL}/${endpoint}`);
-       return res.json();
-     }
-
-     // Ejemplo de uso:
-     // const portafolio = await fetchFromPython('portfolio/summary');
-     // DATA.capitalDisponible = portafolio.capital;
-     // renderSummaryCards();
-  */
 });

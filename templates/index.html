@@ -527,7 +527,20 @@
         </div>
         <div class="charts-grid" style="margin-top:24px">
           <div class="chart-card reveal">
-            <div class="chart-card-header"><h3>Rentabilidad Mensual</h3></div>
+            <div class="chart-card-header">
+              <h3>Rentabilidad</h3>
+              <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+                <select id="rentabilidadTicker" class="form-control" 
+                  style="width:auto;padding:4px 10px;font-size:12px">
+                  <option value="portfolio">Todas</option>
+                </select>
+                <div style="display:flex;gap:4px">
+                  <button class="chart-btn active" data-periodo="dias">Días</button>
+                  <button class="chart-btn" data-periodo="meses">Meses</button>
+                  <button class="chart-btn" data-periodo="anios">Años</button>
+                </div>
+              </div>
+            </div>
             <canvas id="monthlyReturnChart" height="200"></canvas>
           </div>
           <div class="chart-card reveal delay-1">
